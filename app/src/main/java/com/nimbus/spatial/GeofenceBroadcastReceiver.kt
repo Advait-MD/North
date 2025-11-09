@@ -63,12 +63,12 @@ class GeofenceBroadcastReceiver : BroadcastReceiver() {
 
                     val message = when (transitionType) {
                         Geofence.GEOFENCE_TRANSITION_ENTER -> {
-                            WallpaperUtils.setWallpaper(context, R.drawable.in_fenceee)
+                            WallpaperUtils.setWallpaper(context, R.drawable.in_fence)
                             sharedPref.edit().putString(KEY_CURRENT_FENCE_ID, areaId).apply()
                             "You are in $areaName"
                         }
                         Geofence.GEOFENCE_TRANSITION_EXIT -> {
-                            WallpaperUtils.setWallpaper(context, R.drawable.out_fenceee)
+                            WallpaperUtils.setWallpaper(context, R.drawable.out_fence)
                             sharedPref.edit().remove(KEY_CURRENT_FENCE_ID).apply()
                             "You are out of $areaName"
                         }
