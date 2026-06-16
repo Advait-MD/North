@@ -153,14 +153,8 @@ North aims to transform document storage from a passive repository into an intel
 
 ---
 
-## License
-
-MIT License
-
----
 
 ## Author
 
 **Advait**
 
-Engineer, builder of systems, and occasional combatant against entropy.
