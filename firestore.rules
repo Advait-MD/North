@@ -1,0 +1,41 @@
+rules_version = '2';
+
+// Every document belongs to exactly one user (ownerId). Users can only see and change their own.
+// Note: rules are not filters, so client queries must include whereEqualTo("ownerId", uid).
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function ownsExisting() {
+      return signedIn() && resource.data.ownerId == request.auth.uid;
+    }
+
+    function ownsIncoming() {
+      return signedIn() && request.resource.data.ownerId == request.auth.uid;
+    }
+
+    function ownsArea(areaId) {
+      let path = /databases/$(database)/documents/geofence_areas/$(areaId);
+      return exists(path) && get(path).data.ownerId == request.auth.uid;
+    }
+
+    match /geofence_areas/{areaId} {
+      allow read, delete: if ownsExisting();
+      allow create: if ownsIncoming();
+      // ownerId can't be changed: both old and new must be the caller.
+      allow update: if ownsExisting() && ownsIncoming();
+    }
+
+    match /geofences/{geofenceId}/entities/{entityId} {
+      allow read, delete: if ownsExisting();
+      // Files can only be attached to a geofence the caller owns.
+      allow create: if ownsIncoming() && ownsArea(geofenceId);
+      allow update: if ownsExisting() && ownsIncoming();
+    }
+
+    // Everything else is denied by default.
+  }
+}

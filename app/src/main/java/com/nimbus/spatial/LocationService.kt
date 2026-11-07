@@ -7,11 +7,13 @@ import android.app.NotificationManager
 import android.app.Service
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
+import androidx.core.app.ServiceCompat
 import com.google.android.gms.location.*
 
 class LocationService : Service() {
@@ -57,7 +59,16 @@ class LocationService : Service() {
             .setSmallIcon(R.drawable.ic_northstar)
             .build()
 
-        startForeground(1, notification)
+        try {
+            // Android 14+ requires the type to be passed, and throws if location
+            // permission hasn't been granted yet.
+            ServiceCompat.startForeground(
+                this, 1, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+            )
+        } catch (e: SecurityException) {
+            Log.e("NimbusService", "Can't start location foreground service: ${e.message}")
+            stopSelf()
+        }
     }
 
     private fun requestLocationUpdates() {

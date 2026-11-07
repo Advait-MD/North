@@ -32,18 +32,20 @@ class GeofenceBroadcastReceiver : BroadcastReceiver() {
             return
         }
 
-        val areaId = triggeringGeofences[0].requestId
-        Log.d("GeofenceReceiver", "Transition $transitionType for geofence: $areaId")
+        if (triggeringGeofences.isEmpty()) return
+        val triggeringIds = triggeringGeofences.map { it.requestId }
+        val areaId = triggeringIds[0]
+        Log.d("GeofenceReceiver", "Transition $transitionType for geofences: $triggeringIds")
 
-        // Update enabledGeofenceIds
+        // Persisted set of fences the user is inside (survives process death, no duplicates).
         when (transitionType) {
             Geofence.GEOFENCE_TRANSITION_ENTER -> {
-                MainActivity.enabledGeofenceIds.add(areaId)
-                Log.d("GeofenceReceiver", "Entered geofence: $areaId, enabledGeofenceIds: ${MainActivity.enabledGeofenceIds}")
+                val inside = GeofenceStateStore.onEnter(context, triggeringIds)
+                Log.d("GeofenceReceiver", "Entered $triggeringIds, inside: $inside")
             }
             Geofence.GEOFENCE_TRANSITION_EXIT -> {
-                MainActivity.enabledGeofenceIds.remove(areaId)
-                Log.d("GeofenceReceiver", "Exited geofence: $areaId, enabledGeofenceIds: ${MainActivity.enabledGeofenceIds}")
+                val inside = GeofenceStateStore.onExit(context, triggeringIds)
+                Log.d("GeofenceReceiver", "Exited $triggeringIds, inside: $inside")
             }
             else -> {
                 Log.d("GeofenceReceiver", "Unhandled transition type: $transitionType")

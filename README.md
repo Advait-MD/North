@@ -1,160 +1,95 @@
 # North
 
-> Spatially-Aware Document Storage and Retrieval Platform
+> Location-gated file shortcuts for Android.
 
-North is a high-performance document storage system designed to organize, index, and retrieve information using spatial awareness and contextual relationships. Rather than treating documents as isolated records, North models them as interconnected entities within a multidimensional knowledge space, enabling faster discovery, richer search experiences, and more intelligent data organization.
+North is an Android app that ties files on your phone to places. You draw a
+circular **geofence** around where you're standing, attach images, videos or
+PDFs to it, and those files can only be opened from the app while you're
+inside that area. When you enter or leave a geofence, North posts a
+notification and swaps your home and lock-screen wallpaper.
 
----
-
-## Overview
-
-Traditional document databases primarily rely on keyword matching, metadata filters, and hierarchical structures. While effective for basic storage, these approaches often struggle to capture semantic relationships between documents.
-
-North addresses this limitation by introducing a spatially-aware storage architecture where documents are represented as vectors within a high-dimensional space. Similar documents naturally cluster together, allowing the system to understand contextual proximity, thematic relationships, and semantic relevance.
-
-This architecture enables efficient similarity search, contextual retrieval, knowledge mapping, and intelligent document navigation across large-scale datasets.
+It's a personal project built with Kotlin, Google Play Services geofencing
+and Firebase (Auth and Firestore).
 
 ---
 
-## Key Features
-
-### Spatial Document Representation
-
-Every document stored in North is transformed into a vectorized representation that captures semantic meaning and contextual information. Documents with related content occupy nearby regions in the vector space, enabling intuitive relationship discovery.
-
-### Intelligent Similarity Search
-
-North supports nearest-neighbor retrieval, allowing users to locate relevant documents based on conceptual similarity rather than exact keyword matches.
-
-### Contextual Knowledge Graph
-
-Documents are automatically linked through inferred relationships, creating a dynamic knowledge network that evolves as new information is ingested.
-
-### Scalable Storage Architecture
-
-The platform is designed for distributed environments and can efficiently manage millions of documents while maintaining low-latency retrieval performance.
-
-### Metadata and Semantic Indexing
-
-North combines traditional metadata indexing with vector-based search to provide both structured and unstructured querying capabilities.
-
-### Real-Time Updates
-
-New documents can be indexed and integrated into the spatial storage layer without requiring costly full-system reindexing operations.
-
----
-
-## Architecture
+## How it works
 
 ```text
-                    ┌──────────────────┐
-                    │ Document Ingestion│
-                    └─────────┬────────┘
-                              │
-                              ▼
-                    ┌──────────────────┐
-                    │ Embedding Engine │
-                    └─────────┬────────┘
-                              │
-                              ▼
-                    ┌──────────────────┐
-                    │ Vector Generation│
-                    └─────────┬────────┘
-                              │
-            ┌─────────────────┴─────────────────┐
-            ▼                                   ▼
- ┌────────────────────┐            ┌────────────────────┐
- │ Metadata Storage   │            │ Spatial Index      │
- └────────────────────┘            └────────────────────┘
-            │                                   │
-            └──────────────┬────────────────────┘
-                           ▼
-                 ┌──────────────────┐
-                 │ Retrieval Engine │
-                 └─────────┬────────┘
-                           ▼
-                 ┌──────────────────┐
-                 │ Query Results    │
-                 └──────────────────┘
+ ┌──────────────┐   create fence    ┌──────────────────────────┐
+ │ MainActivity │ ────────────────▶ │ Firestore: geofence_areas│
+ │  (GPS fix +  │                   │  {name, lat, lng, radius,│
+ │   radius)    │ ── register ──┐   │   isEnabled, ownerId}    │
+ └──────┬───────┘               │   └──────────────────────────┘
+        │ open fence            ▼
+        │              ┌──────────────────┐  ENTER / EXIT  ┌────────────────────────────┐
+        │              │ Play Services     │ ─────────────▶ │ GeofenceBroadcastReceiver  │
+        │              │ Geofencing API    │                │  • updates inside-state    │
+        │              └──────────────────┘                │  • notification + wallpaper│
+        ▼                                                   └─────────────┬──────────────┘
+ ┌───────────────────────┐   reads inside-state                           │
+ │ GeofenceDetailActivity│ ◀────────── GeofenceStateStore (SharedPrefs) ◀─┘
+ │  lists attached files │
+ │  locked when outside  │ ──▶ Firestore: geofences/{id}/entities
+ └───────────────────────┘      {fileName, localUri, mimeType, ownerId}
 ```
 
----
+1. **Sign in** with email and password (Firebase Auth).
+2. **Create a geofence**: wait for a GPS fix, pick a radius (slider) and a name.
+   The fence is saved to Firestore and registered with the Geofencing API.
+3. **Attach files**: open a fence and pick a file. Only its metadata and
+   on-device `content://` URI are stored in Firestore. **The file itself
+   never leaves the phone.**
+4. **Enter/exit**: the broadcast receiver records which fences you're inside
+   (persisted in `SharedPreferences`), then notifies you and changes the wallpaper.
+5. **Open files**: files in a fence are clickable only while you're inside it.
 
-## Core Components
+## Honest limitations
 
-### Document Ingestion Layer
+- **The "lock" is a UI gate, not encryption.** Files stay unencrypted on the
+  device and can be opened with any gallery or file manager. GPS can also be
+  spoofed with mock-location apps.
+- Attached files are device-local URIs, so they don't sync between devices.
+- Geofences are cleared by Android on reboot and are re-registered the next
+  time the app is opened.
+- Geofence events in the background need **"Allow all the time"** location access.
 
-Responsible for accepting raw documents, validating content, extracting metadata, and preparing information for indexing.
+## Project layout
 
-### Embedding Engine
+| File | Responsibility |
+|---|---|
+| `LoginActivity.kt` | Email/password sign-in |
+| `MainActivity.kt` | Permissions, location updates, creating, listing, registering and deleting geofences |
+| `GeofenceDetailActivity.kt` | Attaching and listing files for one geofence |
+| `GeofenceBroadcastReceiver.kt` | Handles ENTER/EXIT transitions |
+| `GeofenceState.kt` / `GeofenceStateStore.kt` | Which fences the user is currently inside (pure logic + persistence) |
+| `LocationService.kt` | Foreground location service |
+| `WallpaperUtils.kt` | Wallpaper switching |
+| `firestore.rules` | Firestore security rules (per-user ownership) |
 
-Converts textual content into numerical vector representations using machine learning models. These embeddings capture semantic meaning and contextual relationships.
+## Setup
 
-### Spatial Index
+1. Open the project in Android Studio (AGP 8.10, Kotlin 2.0, `minSdk` 26, `targetSdk` 35).
+2. Create a Firebase project, enable **Email/Password** auth and **Cloud Firestore**,
+   and replace `app/google-services.json` with your own.
+3. Deploy the security rules:
 
-Maintains efficient structures for nearest-neighbor and similarity-based searches. This component enables rapid retrieval even across massive document collections.
+   ```bash
+   firebase deploy --only firestore:rules
+   ```
 
-### Retrieval Engine
+4. Run on a device with Google Play Services. Grant location, then choose
+   **"Allow all the time"** when prompted.
 
-Combines semantic similarity, metadata filtering, ranking algorithms, and contextual scoring to generate highly relevant results.
+## Tests
 
-### Relationship Manager
+```bash
+./gradlew testDebugUnitTest
+```
 
-Tracks document associations and constructs contextual links that enable exploration beyond direct search queries.
+Unit tests cover the geofence inside/outside state logic. The Firestore security
+rules have their own emulator tests (needs Node and Java):
 
----
-
-## Use Cases
-
-### Knowledge Management
-
-Create intelligent knowledge repositories where related documents are automatically connected and discoverable.
-
-### Research Systems
-
-Enable researchers to locate conceptually similar papers, reports, and datasets without relying solely on keyword searches.
-
-### Enterprise Search
-
-Improve organizational document retrieval by incorporating semantic understanding and contextual relevance.
-
-### AI-Augmented Retrieval
-
-Serve as the retrieval layer for Retrieval-Augmented Generation (RAG) systems and conversational AI platforms.
-
----
-
-## Performance Goals
-
-* Sub-second semantic retrieval
-* Horizontal scalability
-* High-dimensional vector indexing
-* Distributed storage support
-* Fault-tolerant architecture
-* Real-time document updates
-
----
-
-## Future Roadmap
-
-* Advanced graph-based document navigation
-* Geospatial document indexing
-* Hybrid semantic and keyword retrieval
-* Distributed vector clustering
-* Multi-modal document support
-* Adaptive relevance ranking
-* Real-time collaborative knowledge spaces
-
----
-
-## Vision
-
-North aims to transform document storage from a passive repository into an intelligent knowledge infrastructure. By combining spatial awareness, semantic understanding, and scalable architecture, the platform enables organizations to discover, connect, and utilize information more effectively than traditional storage systems.
-
----
-
-
-## Author
-
-**Advait**
-
+```bash
+cd firestore-tests && npm install && npm test
+```

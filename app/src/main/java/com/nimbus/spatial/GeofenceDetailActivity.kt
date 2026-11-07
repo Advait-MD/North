@@ -111,7 +111,7 @@ class GeofenceDetailActivity : AppCompatActivity() {
             .addOnSuccessListener { result ->
                 entityItems.clear()
 
-                val isInsideGeofence = MainActivity.enabledGeofenceIds.contains(geofenceId)
+                val isInsideGeofence = GeofenceStateStore.isInside(this, geofenceId)
 
                 for (doc in result) {
                     val fileName = doc.getString("fileName") ?: "Unknown"
