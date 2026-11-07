@@ -33,7 +33,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginBottom="8dp"
-        android:text="Selected Radius: 10 meters"
+        android:text="Selected Radius: 50 meters"
         android:textColor="#000000"
         android:textSize="16sp" />
 
@@ -44,13 +44,14 @@
         android:layout_marginBottom="16dp"
         android:stepSize="10"
         android:valueFrom="10"
-        android:valueTo="200" />
+        android:valueTo="200"
+        android:value="50" />
 
     <Button
         android:id="@+id/btn_create_geofence"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Create Geofence"
+        android:text="Create Place Here"
         android:layout_marginBottom="16dp" />
 
     <!-- Dropdown Label -->
@@ -58,7 +59,7 @@
         android:id="@+id/tv_dropdown_label"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Your Geofences"
+        android:text="Your places and public places nearby"
         android:textStyle="bold"
         android:textSize="16sp"
         android:layout_marginTop="16dp"

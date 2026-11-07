@@ -1,0 +1,98 @@
+rules_version = '2';
+
+// Layout:
+//   geofence_areas/{placeId}                 a place (owner, centre, radius, visibility, geohash)
+//   geofence_areas/{placeId}/entities/{id}   metadata for a file stored at places/{placeId}/{id}
+//
+// File *bytes* are never readable by visitors through these rules or storage.rules: they get
+// a short-lived signed URL from the getFileAccessUrl Cloud Function after a location check.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function validVisibility(v) {
+      return v in ['public', 'private'];
+    }
+
+    match /geofence_areas/{placeId} {
+
+      function validPlace(d) {
+        return d.keys().hasOnly(['id', 'name', 'latitude', 'longitude', 'radius', 'enabled',
+                                 'ownerId', 'visibility', 'geohash', 'createdAt'])
+          && d.name is string && d.name.size() > 0 && d.name.size() <= 80
+          && d.latitude is number && d.latitude >= -90 && d.latitude <= 90
+          && d.longitude is number && d.longitude >= -180 && d.longitude <= 180
+          && d.radius is number && d.radius >= 10 && d.radius <= 1000
+          && d.enabled is bool
+          && validVisibility(d.visibility)
+          && d.geohash is string && d.geohash.size() > 0;
+      }
+
+      // Visitors can discover public places; private ones are visible to the owner only.
+      // A missing visibility field (places made before this existed) counts as private.
+      allow read: if signedIn()
+        && (resource.data.ownerId == request.auth.uid
+            || resource.data.get('visibility', 'private') == 'public');
+
+      allow create: if signedIn()
+        && request.resource.data.ownerId == request.auth.uid
+        && validPlace(request.resource.data);
+
+      allow update: if signedIn()
+        && resource.data.ownerId == request.auth.uid
+        && request.resource.data.ownerId == resource.data.ownerId
+        && validPlace(request.resource.data);
+
+      allow delete: if signedIn() && resource.data.ownerId == request.auth.uid;
+
+      match /entities/{fileId} {
+
+        function place() {
+          return get(/databases/$(database)/documents/geofence_areas/$(placeId)).data;
+        }
+
+        function isPlaceOwner() {
+          return signedIn() && place().ownerId == request.auth.uid;
+        }
+
+        function validFile(d) {
+          return d.keys().hasOnly(['placeId', 'displayName', 'storagePath', 'mimeType',
+                                   'sizeBytes', 'visibility', 'ownerId', 'createdAt'])
+            && d.placeId == placeId
+            && d.storagePath == 'places/' + placeId + '/' + fileId
+            && d.displayName is string && d.displayName.size() > 0 && d.displayName.size() <= 255
+            && d.mimeType is string
+            && d.sizeBytes is int && d.sizeBytes >= 0
+            && validVisibility(d.visibility)
+            && d.ownerId == request.auth.uid
+            // A private place can't hold public files.
+            && (d.visibility == 'private' || place().visibility == 'public');
+        }
+
+        // Metadata of public files at public places is listable by anyone signed in; that is
+        // how visitors see what is there before they arrive. Opening needs the Cloud Function.
+        allow read: if isPlaceOwner()
+          || (signedIn()
+              && resource.data.visibility == 'public'
+              && place().visibility == 'public');
+
+        // Only the place's owner publishes files there.
+        allow create: if isPlaceOwner() && validFile(request.resource.data);
+
+        allow update: if isPlaceOwner()
+          && validFile(request.resource.data)
+          && request.resource.data.storagePath == resource.data.storagePath;
+
+        allow delete: if isPlaceOwner();
+      }
+    }
+
+    // Everything else, including the old geofences/{id}/entities collection, is closed.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

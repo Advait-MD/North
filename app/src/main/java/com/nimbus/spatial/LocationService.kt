@@ -7,13 +7,24 @@ import android.app.NotificationManager
 import android.app.Service
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
-import com.google.android.gms.location.*
+import androidx.core.app.ServiceCompat
+import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationCallback
+import com.google.android.gms.location.LocationRequest
+import com.google.android.gms.location.LocationResult
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
 
+/**
+ * Keeps the set of watched places fresh while the user moves around. Entering and leaving
+ * places is detected by Android's geofencing API, so this only needs coarse, infrequent fixes.
+ */
 class LocationService : Service() {
 
     private lateinit var fusedLocationProviderClient: FusedLocationProviderClient
@@ -21,60 +32,47 @@ class LocationService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-
         fusedLocationProviderClient = LocationServices.getFusedLocationProviderClient(this)
-
         locationCallback = object : LocationCallback() {
             override fun onLocationResult(result: LocationResult) {
-                val location = result.lastLocation
-                if (location != null) {
-                    Log.d("NimbusService", "Background location: ${location.latitude}, ${location.longitude}")
+                val location = result.lastLocation ?: return
+                if (PlaceSync.shouldRefresh(this@LocationService, location.latitude, location.longitude)) {
+                    Log.d(TAG, "Moved; refreshing nearby places")
+                    PlaceSync.refresh(this@LocationService, location.latitude, location.longitude)
                 }
             }
         }
-
-        startForegroundService()
+        startInForeground()
         requestLocationUpdates()
     }
 
-    private fun startForegroundService() {
+    private fun startInForeground() {
         val channelId = "location_channel"
-        val channelName = "Location Updates"
-
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
-                channelId,
-                channelName,
-                NotificationManager.IMPORTANCE_LOW
+                channelId, "Location Updates", NotificationManager.IMPORTANCE_LOW
             )
-            val manager = getSystemService(NotificationManager::class.java)
-            manager.createNotificationChannel(channel)
+            getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
         }
-
         val notification: Notification = NotificationCompat.Builder(this, channelId)
             .setContentTitle("North Point")
             .setContentText("Getting along with your space...")
             .setSmallIcon(R.drawable.ic_northstar)
             .build()
-
-        startForeground(1, notification)
+        // Android 14+ requires the type here to match the manifest's foregroundServiceType.
+        val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION else 0
+        ServiceCompat.startForeground(this, 1, notification, type)
     }
 
     private fun requestLocationUpdates() {
-        val request = LocationRequest.Builder(
-            Priority.PRIORITY_HIGH_ACCURACY, 5000
-        ).build()
-
-        if (ActivityCompat.checkSelfPermission(
-                this,
-                Manifest.permission.ACCESS_FINE_LOCATION
-            ) == PackageManager.PERMISSION_GRANTED
+        val request = LocationRequest.Builder(Priority.PRIORITY_BALANCED_POWER_ACCURACY, 60_000L)
+            .setMinUpdateDistanceMeters(100f)
+            .build()
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED
         ) {
-            fusedLocationProviderClient.requestLocationUpdates(
-                request,
-                locationCallback,
-                mainLooper
-            )
+            fusedLocationProviderClient.requestLocationUpdates(request, locationCallback, mainLooper)
         }
     }
 
@@ -84,4 +82,8 @@ class LocationService : Service() {
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    private companion object {
+        const val TAG = "NimbusService"
+    }
 }

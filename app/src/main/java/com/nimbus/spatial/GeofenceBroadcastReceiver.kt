@@ -11,91 +11,65 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.google.android.gms.location.Geofence
+import com.google.android.gms.location.GeofenceStatusCodes
 import com.google.android.gms.location.GeofencingEvent
-import com.google.firebase.firestore.FirebaseFirestore
-
-const val PREF_NAME = "GeofencePrefs"
-const val KEY_CURRENT_FENCE_ID = "currentFenceId"
 
 class GeofenceBroadcastReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
-        val geofencingEvent = GeofencingEvent.fromIntent(intent)
-        if (geofencingEvent == null || geofencingEvent.hasError()) {
-            Log.e("GeofenceReceiver", "Geofence error: ${geofencingEvent?.errorCode}")
+        val event = GeofencingEvent.fromIntent(intent) ?: return
+        if (event.hasError()) {
+            Log.e(TAG, "Geofence error: ${GeofenceStatusCodes.getStatusCodeString(event.errorCode)}")
+            if (event.errorCode == GeofenceStatusCodes.GEOFENCE_NOT_AVAILABLE) {
+                // Location was switched off and Android dropped every geofence.
+                GeofenceStateStore.resetRegistration(context)
+            }
             return
         }
 
-        val transitionType = geofencingEvent.geofenceTransition
-        val triggeringGeofences = geofencingEvent.triggeringGeofences ?: run {
-            Log.e("GeofenceReceiver", "No triggering geofences found")
-            return
+        val transition = event.geofenceTransition
+        val ids = event.triggeringGeofences?.map { it.requestId }.orEmpty()
+        if (ids.isEmpty()) return
+
+        val changed = when (transition) {
+            // markInside() is false when we already knew, e.g. after a re-registration.
+            Geofence.GEOFENCE_TRANSITION_ENTER -> ids.filter { GeofenceStateStore.markInside(context, it) }
+            Geofence.GEOFENCE_TRANSITION_EXIT -> ids.onEach { GeofenceStateStore.markOutside(context, it) }
+            else -> return
+        }
+        if (changed.isEmpty()) return
+
+        // Firestore lookups outlive onReceive(), so keep the receiver alive until they finish.
+        val pending = goAsync()
+        var remaining = changed.size
+        fun done() { if (--remaining == 0) pending.finish() }
+
+        changed.forEach { id ->
+            PlaceRepository.getPlace(id).addOnCompleteListener { task ->
+                // task.result throws on failure, so check first.
+                val name = (if (task.isSuccessful) task.result?.name else null) ?: "a North place"
+                val entered = transition == Geofence.GEOFENCE_TRANSITION_ENTER
+                showNotification(context, if (entered) "You are in $name" else "You left $name")
+                done()
+            }
         }
 
-        val areaId = triggeringGeofences[0].requestId
-        Log.d("GeofenceReceiver", "Transition $transitionType for geofence: $areaId")
-
-        // Update enabledGeofenceIds
-        when (transitionType) {
-            Geofence.GEOFENCE_TRANSITION_ENTER -> {
-                MainActivity.enabledGeofenceIds.add(areaId)
-                Log.d("GeofenceReceiver", "Entered geofence: $areaId, enabledGeofenceIds: ${MainActivity.enabledGeofenceIds}")
-            }
-            Geofence.GEOFENCE_TRANSITION_EXIT -> {
-                MainActivity.enabledGeofenceIds.remove(areaId)
-                Log.d("GeofenceReceiver", "Exited geofence: $areaId, enabledGeofenceIds: ${MainActivity.enabledGeofenceIds}")
-            }
-            else -> {
-                Log.d("GeofenceReceiver", "Unhandled transition type: $transitionType")
-                return
-            }
+        if (transition == Geofence.GEOFENCE_TRANSITION_ENTER) {
+            WallpaperUtils.setWallpaper(context, R.drawable.in_fence)
+        } else if (!GeofenceStateStore.isInsideAny(context)) {
+            WallpaperUtils.setWallpaper(context, R.drawable.out_fence)
         }
-
-        // Existing logic for SharedPreferences and notifications
-        FirebaseFirestore.getInstance()
-            .collection("geofence_areas")
-            .document(areaId)
-            .get()
-            .addOnSuccessListener { doc ->
-                if (doc.exists()) {
-                    val areaName = doc.getString("name") ?: "Unknown"
-                    val sharedPref = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
-
-                    val message = when (transitionType) {
-                        Geofence.GEOFENCE_TRANSITION_ENTER -> {
-                            WallpaperUtils.setWallpaper(context, R.drawable.in_fence)
-                            sharedPref.edit().putString(KEY_CURRENT_FENCE_ID, areaId).apply()
-                            "You are in $areaName"
-                        }
-                        Geofence.GEOFENCE_TRANSITION_EXIT -> {
-                            WallpaperUtils.setWallpaper(context, R.drawable.out_fence)
-                            sharedPref.edit().remove(KEY_CURRENT_FENCE_ID).apply()
-                            "You are out of $areaName"
-                        }
-                        else -> return@addOnSuccessListener
-                    }
-
-                    showNotification(context, message)
-                }
-            }
-            .addOnFailureListener {
-                Log.e("GeofenceReceiver", "Failed to fetch area name: ${it.message}")
-            }
     }
 
     private fun showNotification(context: Context, message: String) {
         val channelId = "nimbus_geofence_channel"
-
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
-                channelId,
-                "North Geofence Alerts",
-                NotificationManager.IMPORTANCE_HIGH
+                channelId, "North Geofence Alerts", NotificationManager.IMPORTANCE_HIGH
             )
-            val manager = context.getSystemService(NotificationManager::class.java)
-            manager?.createNotificationChannel(channel)
+            context.getSystemService(NotificationManager::class.java)
+                ?.createNotificationChannel(channel)
         }
-
         val builder = NotificationCompat.Builder(context, channelId)
             .setSmallIcon(R.drawable.ic_northstar)
             .setContentTitle("North")
@@ -103,15 +77,17 @@ class GeofenceBroadcastReceiver : BroadcastReceiver() {
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
 
-        val notificationId = (1000..999999).random()
-
-        if (
-            Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
-            context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) ==
+            PackageManager.PERMISSION_GRANTED
         ) {
-            NotificationManagerCompat.from(context).notify(notificationId, builder.build())
+            NotificationManagerCompat.from(context).notify((1000..999999).random(), builder.build())
         } else {
-            Log.e("GeofenceReceiver", "Notification permission not granted")
+            Log.w(TAG, "Notification permission not granted")
         }
+    }
+
+    private companion object {
+        const val TAG = "GeofenceReceiver"
     }
 }

@@ -13,10 +13,26 @@
         android:visibility="visible" />
 
     <TextView
+        android:id="@+id/tv_status"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:padding="16dp"
+        android:textSize="14sp" />
+
+    <ProgressBar
+        android:id="@+id/progress_upload"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="16dp"
+        android:max="100"
+        android:visibility="gone" />
+
+    <TextView
         android:id="@+id/tv_empty"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="No entities found"
+        android:text="No files here yet"
         android:gravity="center"
         android:padding="16dp"
         android:visibility="gone" />

@@ -65,7 +65,9 @@ class LoginActivity : AppCompatActivity() {
     }
 
     private fun startMainActivity() {
+        // Clear the blurred, half-initialised MainActivity left behind the login screen.
         val intent = Intent(this, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
         startActivity(intent)
         finish()
     }

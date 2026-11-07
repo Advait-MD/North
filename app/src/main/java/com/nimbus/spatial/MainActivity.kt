@@ -1,684 +1,331 @@
 package com.nimbus.spatial
 
-import android.graphics.RenderEffect
-
-import android.graphics.Shader
-
-import android.view.View
-
 import android.Manifest
-
-import android.app.PendingIntent
-
+import android.annotation.SuppressLint
 import android.content.Intent
-
 import android.content.pm.PackageManager
-
 import android.location.Location
-
 import android.os.Build
-
 import android.os.Bundle
-
 import android.util.Log
-
-import android.widget.*
-
+import android.widget.Button
+import android.widget.CheckBox
+import android.widget.EditText
+import android.widget.LinearLayout
+import android.widget.TextView
+import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
-
 import androidx.appcompat.app.AppCompatActivity
-
-import androidx.core.app.ActivityCompat
-
+import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
-
 import androidx.recyclerview.widget.RecyclerView
-
-import com.google.android.gms.location.*
-
+import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationCallback
+import com.google.android.gms.location.LocationRequest
+import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
-
+import com.google.android.gms.location.Priority
 import com.google.android.material.slider.Slider
-
 import com.google.firebase.auth.FirebaseAuth
-
-import com.google.firebase.firestore.FirebaseFirestore
-
-import java.util.*
 
 class MainActivity : AppCompatActivity() {
 
     companion object {
-        // ✅ This makes enabledGeofenceIds accessible from other classes like GeofenceBroadcastReceiver
-        val enabledGeofenceIds = mutableListOf<String>()
+        private const val TAG = "MainActivity"
+
+        /** Geofences are wiped on reboot/update; re-register everything once per process. */
+        private var registrationResetThisProcess = false
     }
-
-    private val TAG = "MainActivity"
-
-
 
     private lateinit var adapter: GeofenceAdapter
-
-    private lateinit var firestore: FirebaseFirestore
-
     private lateinit var fusedLocationClient: FusedLocationProviderClient
-
-    private lateinit var geofencingClient: GeofencingClient
-
-    private lateinit var geofencePendingIntent: PendingIntent
-
-    private lateinit var locationCallback: LocationCallback
-
-
-
-    private var currentFenceId: String? = null
-
-    private var currentLocation: Location? = null
-
-    private val geofenceList = mutableListOf<GeofenceArea>()
-
-    private val PERMISSIONS_CODE = 1001
-
-
-
-// UI elements
-
-    private lateinit var btnCreate: Button
-
     private lateinit var slider: Slider
-
     private lateinit var tvRadius: TextView
 
+    private val rows = mutableListOf<PlaceRow>()
+    private var mine: List<GeofenceArea> = emptyList()
+    private var nearbyPublic: List<GeofenceArea> = emptyList()
+    private var currentLocation: Location? = null
+    private var hasSyncedThisSession = false
+    private var uiReady = false
 
+    private val locationCallback = object : LocationCallback() {
+        override fun onLocationResult(res: LocationResult) {
+            val loc = res.lastLocation ?: return
+            currentLocation = loc
+            if (!hasSyncedThisSession || PlaceSync.shouldRefresh(this@MainActivity, loc.latitude, loc.longitude)) {
+                hasSyncedThisSession = true
+                syncPlaces(loc)
+            } else {
+                renderRows()
+            }
+        }
+    }
+
+    private val foregroundPermissions = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { granted ->
+        if (granted[Manifest.permission.ACCESS_FINE_LOCATION] == true) {
+            onLocationGranted()
+        } else {
+            Toast.makeText(this, "North needs location to unlock files at places", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    // Android 11+ ignores background location when it's requested together with foreground.
+    private val backgroundPermission = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (!granted) {
+            Toast.makeText(this, "Without \"Allow all the time\", places only unlock while North is open", Toast.LENGTH_LONG).show()
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-
         super.onCreate(savedInstanceState)
 
-
-
-        val currentUser = FirebaseAuth.getInstance().currentUser
-
-        if (currentUser == null) {
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-
-                val rootView = window.decorView.findViewById<View>(android.R.id.content)
-
-                val blur = RenderEffect.createBlurEffect(20f, 20f, Shader.TileMode.CLAMP)
-
-                rootView.setRenderEffect(blur)
-
-            }
-
-
-
-            val intent = Intent(this, LoginActivity::class.java)
-
-            startActivity(intent)
-
-            return // Don't finish(), just let it come back
-
+        if (FirebaseAuth.getInstance().currentUser == null) {
+            // LoginActivity starts a fresh MainActivity once signed in.
+            startActivity(Intent(this, LoginActivity::class.java))
+            finish()
+            return
         }
-
-
-
-
 
         setContentView(R.layout.activity_main)
-
-
-
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
-
-
-
-        val logoutButton = findViewById<Button>(R.id.logoutButton)
-
-        logoutButton.setOnClickListener {
-
-            FirebaseAuth.getInstance().signOut()
-
-            val intent = Intent(this, LoginActivity::class.java)
-
-            startActivity(intent)
-
-            finish()
-
+        if (!registrationResetThisProcess) {
+            GeofenceStateStore.resetRegistration(this)
+            registrationResetThisProcess = true
         }
-
-        // Enable Firestore logs (optional)
-
-        FirebaseFirestore.setLoggingEnabled(true)
-
-        firestore = FirebaseFirestore.getInstance()
-
-
-
-        requestPermissions()
-
-        initLocationAndGeofence()
-
-
-
-        // Now load UI and data
 
         setupUI()
-
-        loadGeofences()
-
-        loadAndRegisterEnabledGeofences()
-
-
-
-        startForegroundService()
-
+        loadMyPlaces()
+        requestForegroundPermissions()
     }
-
-
 
     override fun onStart() {
-
         super.onStart()
+        if (uiReady && FirebaseAuth.getInstance().currentUser != null) startLocationUpdates()
+    }
 
-
-
-        val user = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
-
-        if (user == null) {
-
-            startActivity(Intent(this, LoginActivity::class.java))
-
-            finish()
-
+    override fun onStop() {
+        if (::fusedLocationClient.isInitialized) {
+            fusedLocationClient.removeLocationUpdates(locationCallback)
         }
-
+        super.onStop()
     }
 
+    // region permissions
 
+    private fun hasFineLocation() = ContextCompat.checkSelfPermission(
+        this, Manifest.permission.ACCESS_FINE_LOCATION
+    ) == PackageManager.PERMISSION_GRANTED
 
-    override fun onResume() {
-
-        super.onResume()
-
-
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-
-            val rootView = window.decorView.findViewById<View>(android.R.id.content)
-
-            rootView.setRenderEffect(null)
-
+    private fun requestForegroundPermissions() {
+        if (hasFineLocation()) {
+            onLocationGranted()
+            return
         }
-
-    }
-
-
-
-
-
-    private fun requestPermissions() {
-
-        val perms = mutableListOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) perms.add(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) perms.add(Manifest.permission.POST_NOTIFICATIONS)
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) perms.add(Manifest.permission.FOREGROUND_SERVICE)
-
-
-
-        ActivityCompat.requestPermissions(this, perms.toTypedArray(), PERMISSIONS_CODE)
-
-    }
-
-
-
-    private fun initLocationAndGeofence() {
-
-        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
-
-        geofencingClient = LocationServices.getGeofencingClient(this)
-
-
-
-        geofencePendingIntent = PendingIntent.getBroadcast(
-
-            this, 0, Intent(this, GeofenceBroadcastReceiver::class.java),
-
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
-
+        val perms = mutableListOf(
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_COARSE_LOCATION
         )
-
-
-
-        startLocationUpdates()
-
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            perms.add(Manifest.permission.POST_NOTIFICATIONS)
+        }
+        foregroundPermissions.launch(perms.toTypedArray())
     }
 
+    private fun onLocationGranted() {
+        startLocationService()
+        startLocationUpdates()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            AlertDialog.Builder(this)
+                .setTitle("Unlock places in the background")
+                .setMessage("To notice when you walk into a place while North is closed, choose \"Allow all the time\" on the next screen.")
+                .setPositiveButton("Continue") { _, _ ->
+                    backgroundPermission.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+                }
+                .setNegativeButton("Not now", null)
+                .show()
+        }
+    }
 
+    // endregion
 
     private fun setupUI() {
-
         slider = findViewById(R.id.seekbar_radius)
-
         tvRadius = findViewById(R.id.tv_selected_radius)
-
-        btnCreate = findViewById(R.id.btn_create_geofence)
-
-
-
+        tvRadius.text = "Selected Radius: ${slider.value.toInt()} meters"
         slider.addOnChangeListener { _, value, _ ->
-
             tvRadius.text = "Selected Radius: ${value.toInt()} meters"
-
         }
 
-
-
-        btnCreate.setOnClickListener {
-
-            currentLocation?.let {
-
-                showNameDialog(it.latitude, it.longitude, slider.value)
-
-            } ?: Toast.makeText(this, "Waiting for location...", Toast.LENGTH_SHORT).show()
-
+        findViewById<Button>(R.id.btn_create_geofence).setOnClickListener {
+            val loc = currentLocation
+            if (loc == null) {
+                Toast.makeText(this, "Waiting for location...", Toast.LENGTH_SHORT).show()
+            } else {
+                showCreateDialog(loc, slider.value)
+            }
         }
 
-
+        findViewById<Button>(R.id.logoutButton).setOnClickListener {
+            FirebaseAuth.getInstance().signOut()
+            stopService(Intent(this, LocationService::class.java))
+            startActivity(Intent(this, LoginActivity::class.java))
+            finish()
+        }
 
         adapter = GeofenceAdapter(
-
-            geofenceList,
-
-            onDelete = { deleteGeofence(it) },
-
-            onClick = { geofence ->
-
-                val intent = Intent(this, GeofenceDetailActivity::class.java)
-
-                intent.putExtra("geofence_id", geofence.id)
-
-                startActivity(intent)
-
+            rows,
+            onDelete = { confirmDelete(it) },
+            onClick = { place ->
+                startActivity(Intent(this, GeofenceDetailActivity::class.java).apply {
+                    putExtra(GeofenceDetailActivity.EXTRA_PLACE_ID, place.id)
+                    putExtra(GeofenceDetailActivity.EXTRA_PLACE_NAME, place.name)
+                })
             }
-
         )
-
-
-
-
-
         findViewById<RecyclerView>(R.id.recycler_geofences).apply {
-
             layoutManager = LinearLayoutManager(this@MainActivity)
-
             adapter = this@MainActivity.adapter
-
         }
-
+        uiReady = true
     }
 
-
-
-    private fun startForegroundService() {
-
+    private fun startLocationService() {
         val intent = Intent(this, LocationService::class.java)
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
-
-            startForegroundService(intent)
-
-        else
-
-            startService(intent)
-
+        try {
+            ContextCompat.startForegroundService(this, intent)
+        } catch (e: Exception) {
+            // e.g. ForegroundServiceStartNotAllowedException if started from the background.
+            Log.e(TAG, "Could not start location service", e)
+        }
     }
 
-
-
+    @SuppressLint("MissingPermission")
     private fun startLocationUpdates() {
-
-        val req = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 4000L).build()
-
-        locationCallback = object : LocationCallback() {
-
-            override fun onLocationResult(res: LocationResult) {
-
-                currentLocation = res.lastLocation
-
-                Log.d(TAG, "Location update: $currentLocation")
-
-            }
-
-        }
-
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-
-            fusedLocationClient.requestLocationUpdates(req, locationCallback, mainLooper)
-
-        }
-
+        if (!hasFineLocation()) return
+        val req = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 10_000L).build()
+        fusedLocationClient.requestLocationUpdates(req, locationCallback, mainLooper)
     }
 
+    // region places
 
+    /** Shows the user's own places straight away, before the first location fix arrives. */
+    private fun loadMyPlaces() {
+        val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return
+        com.google.firebase.firestore.FirebaseFirestore.getInstance()
+            .collection(FirestorePaths.PLACES)
+            .whereEqualTo("ownerId", uid)
+            .get()
+            .addOnSuccessListener { snap ->
+                mine = snap.documents.mapNotNull { GeofenceArea.fromDoc(it) }
+                renderRows()
+            }
+            .addOnFailureListener {
+                Toast.makeText(this, "Failed to load your places", Toast.LENGTH_SHORT).show()
+            }
+    }
 
-    private fun showNameDialog(lat: Double, lng: Double, radius: Float) {
+    private fun syncPlaces(loc: Location) {
+        PlaceSync.refresh(this, loc.latitude, loc.longitude,
+            onResult = { result ->
+                mine = result.mine
+                nearbyPublic = result.nearbyPublic
+                renderRows()
+            },
+            onError = {
+                Toast.makeText(this, "Couldn't refresh places: ${it.message}", Toast.LENGTH_SHORT).show()
+            }
+        )
+    }
 
-        val input = EditText(this).apply { hint = "Enter area name" }
+    private fun renderRows() {
+        val loc = currentLocation
+        fun dist(p: GeofenceArea) =
+            loc?.let { GeoMath.distanceMeters(it.latitude, it.longitude, p.latitude, p.longitude) }
+
+        rows.clear()
+        rows += mine.map { PlaceRow(it, isMine = true, distanceM = dist(it)) }
+            .sortedBy { it.distanceM ?: Double.MAX_VALUE }
+        rows += nearbyPublic.map { PlaceRow(it, isMine = false, distanceM = dist(it)) }
+        adapter.notifyDataSetChanged()
+    }
+
+    private fun showCreateDialog(loc: Location, radius: Float) {
+        val pad = (16 * resources.displayMetrics.density).toInt()
+        val nameInput = EditText(this).apply { hint = "Place name" }
+        val publicBox = CheckBox(this).apply {
+            text = "Public: anyone standing here can open the files you mark public"
+        }
+        val form = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(pad, pad / 2, pad, 0)
+            addView(nameInput)
+            addView(publicBox)
+        }
 
         AlertDialog.Builder(this)
-
-            .setTitle("Name this Geofence")
-
-            .setView(input)
-
+            .setTitle("New place")
+            .setView(form)
             .setPositiveButton("Save") { _, _ ->
-
-                val name = input.text.toString().trim()
-
-                if (name.isEmpty()) {
-
-                    Toast.makeText(this, "Name required", Toast.LENGTH_SHORT).show()
-
-                } else {
-
-                    val id = UUID.randomUUID().toString()
-
-                    val currentUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
-
-                    val userId = currentUser?.uid
-
-
-
-                    if (userId == null) {
-
-                        Toast.makeText(this, "User not authenticated", Toast.LENGTH_SHORT).show()
-
-                        return@setPositiveButton
-
-                    }
-
-
-
-                    val a = GeofenceArea(
-
-                        id = id,
-
-                        name = name,
-
-                        latitude = lat,
-
-                        longitude = lng,
-
-                        radius = radius,
-
-                        isEnabled = true,
-
-                        ownerId = userId // ✅ important!
-
+                val name = nameInput.text.toString().trim()
+                val uid = FirebaseAuth.getInstance().currentUser?.uid
+                when {
+                    name.isEmpty() -> Toast.makeText(this, "Name required", Toast.LENGTH_SHORT).show()
+                    name.length > 80 -> Toast.makeText(this, "Name too long", Toast.LENGTH_SHORT).show()
+                    uid == null -> Toast.makeText(this, "User not authenticated", Toast.LENGTH_SHORT).show()
+                    else -> createPlace(
+                        PlaceRepository.newPlace(name, loc.latitude, loc.longitude, radius, uid, publicBox.isChecked),
+                        loc
                     )
-
-
-
-                    firestore.collection("geofence_areas")
-
-                        .document(id)
-
-                        .set(a)
-
-                        .addOnSuccessListener {
-
-                            Toast.makeText(this, "Saved", Toast.LENGTH_SHORT).show()
-
-                            geofenceList.add(a)
-
-                            adapter.notifyItemInserted(geofenceList.size - 1)
-
-                            addGeofence(a.id, a.latitude, a.longitude, a.radius)
-
-                        }
-
-                        .addOnFailureListener {
-
-                            Toast.makeText(this, "Save failed", Toast.LENGTH_SHORT).show()
-
-                        }
-
-
-
                 }
-
             }
-
             .setNegativeButton("Cancel", null)
-
             .show()
-
     }
 
-
-
-    private fun loadGeofences() {
-
-        val currentUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
-
-        val userId = currentUser?.uid
-
-
-
-        if (userId == null) {
-
-            Toast.makeText(this, "User not logged in", Toast.LENGTH_SHORT).show()
-
-            return
-
-        }
-
-
-
-        firestore.collection("geofence_areas")
-
-            .whereEqualTo("ownerId", userId) // ✅ Filter by logged-in user
-
-            .get()
-
-            .addOnSuccessListener { result ->
-
-                geofenceList.clear()
-
-                for (doc in result) {
-
-                    val geofence = doc.toObject(GeofenceArea::class.java)
-
-                    geofenceList.add(geofence)
-
-                }
-
-                adapter.notifyDataSetChanged()
-
-            }
-
-            .addOnFailureListener {
-
-                Toast.makeText(this, "Failed to load geofences", Toast.LENGTH_SHORT).show()
-
-            }
-
-    }
-
-
-
-
-
-    private fun loadAndRegisterEnabledGeofences() {
-
-        firestore.collection("geofence_areas")
-
-            .whereEqualTo("isEnabled", true)
-
-            .get()
-
-            .addOnSuccessListener { snap ->
-
-                snap.forEach { d ->
-
-                    d.toObject(GeofenceArea::class.java).let {
-
-                        addGeofence(it.id, it.latitude, it.longitude, it.radius)
-
-                        Log.d(TAG, "Registered geofence ${it.id}")
-
-                    }
-
-                }
-
-            }
-
-            .addOnFailureListener {
-
-                Log.e(TAG, "Reload failed: ${it.message}")
-
-            }
-
-    }
-
-
-
-    private fun addGeofence(id: String, lat: Double, lng: Double, radius: Float) {
-
-        val gf = Geofence.Builder()
-
-            .setRequestId(id).setCircularRegion(lat, lng, radius)
-
-            .setExpirationDuration(Geofence.NEVER_EXPIRE)
-
-            .setTransitionTypes(Geofence.GEOFENCE_TRANSITION_ENTER or Geofence.GEOFENCE_TRANSITION_EXIT)
-
-            .build()
-
-        val r = GeofencingRequest.Builder()
-
-            .setInitialTrigger(GeofencingRequest.INITIAL_TRIGGER_ENTER)
-
-            .addGeofence(gf).build()
-
-
-
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED)
-
-            return
-
-
-
-        geofencingClient.addGeofences(r, geofencePendingIntent)
-
-            .addOnSuccessListener { Log.d(TAG, "Added fence $id") }
-
-            .addOnFailureListener { Log.e(TAG, "Add fence $id failed: ${it.message}") }
-
-    }
-
-
-
-// FIXED: Remove only the specific geofence by ID
-
-    private fun removeSpecificGeofence(id: String) {
-
-        geofencingClient.removeGeofences(listOf(id))
-
+    private fun createPlace(place: GeofenceArea, loc: Location) {
+        PlaceRepository.savePlace(place)
             .addOnSuccessListener {
-
-                Log.d(TAG, "Removed geofence: $id")
-
+                Toast.makeText(this, "Saved", Toast.LENGTH_SHORT).show()
+                mine = mine + place
+                renderRows()
+                syncPlaces(loc) // registers the new geofence
             }
-
             .addOnFailureListener {
-
-                Log.e(TAG, "Remove geofence $id failed: ${it.message}")
-
+                Toast.makeText(this, "Save failed: ${it.message}", Toast.LENGTH_SHORT).show()
             }
-
     }
 
-
-
-// Keep this method for complete removal (used in delete)
-
-    private fun removeGeofence(id: String) {
-
-        geofencingClient.removeGeofences(listOf(id))
-
-            .addOnSuccessListener {
-
-                Log.d(TAG, "Removed geofence: $id")
-
-            }
-
-            .addOnFailureListener {
-
-                Log.e(TAG, "Remove geofence $id failed: ${it.message}")
-
-            }
-
+    private fun confirmDelete(place: GeofenceArea) {
+        AlertDialog.Builder(this)
+            .setTitle("Delete ${place.name}?")
+            .setMessage("This permanently deletes the place and every file pinned to it.")
+            .setPositiveButton("Delete") { _, _ -> deletePlace(place) }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
-
-
-    private fun deleteGeofence(area: GeofenceArea) {
-
-        firestore.collection("geofence_areas").document(area.id)
-
-            .delete()
-
+    private fun deletePlace(place: GeofenceArea) {
+        PlaceRepository.deletePlace(place)
             .addOnSuccessListener {
-
-                removeGeofence(area.id)
-
-
-
-                // ✅ Remove from the local list and update the UI
-
-                val idx = geofenceList.indexOfFirst { it.id == area.id }
-
-                if (idx != -1) {
-
-                    geofenceList.removeAt(idx)
-
-                    adapter.notifyItemRemoved(idx)
-
-                }
-
-
-
-                Toast.makeText(this, "${area.name} deleted", Toast.LENGTH_SHORT).show()
-
+                PlaceSync.unregister(this, place.id)
+                mine = mine.filterNot { it.id == place.id }
+                renderRows()
+                Toast.makeText(this, "${place.name} deleted", Toast.LENGTH_SHORT).show()
             }
-
             .addOnFailureListener {
-
-                Log.e("North", "Failed to delete geofence ${area.id}: ${it.message}")
-
+                Log.e(TAG, "Failed to delete place ${place.id}", it)
                 Toast.makeText(this, "Delete failed: ${it.message}", Toast.LENGTH_SHORT).show()
-
             }
-
     }
 
-
-
-    override fun onDestroy() {
-
-        if (::fusedLocationClient.isInitialized) {
-
-            fusedLocationClient.removeLocationUpdates(locationCallback)
-
-        }
-
-        super.onDestroy()
-
-    }
-
+    // endregion
 }

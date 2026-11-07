@@ -1,21 +1,24 @@
 package com.nimbus.spatial
 
-import android.content.Intent
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.*
+import android.widget.ImageView
+import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
-import androidx.core.content.ContextCompat
+
+/** One row in the place list: the user's own places and public places nearby. */
+data class PlaceRow(val place: GeofenceArea, val isMine: Boolean, val distanceM: Double?)
 
 class GeofenceAdapter(
-    private val geofenceList: MutableList<GeofenceArea>,
+    private val rows: MutableList<PlaceRow>,
     private val onDelete: (GeofenceArea) -> Unit,
     private val onClick: (GeofenceArea) -> Unit
 ) : RecyclerView.Adapter<GeofenceAdapter.GeofenceViewHolder>() {
 
     inner class GeofenceViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         val name: TextView = view.findViewById(R.id.tv_area_name)
+        val subtitle: TextView = view.findViewById(R.id.tv_area_subtitle)
         val delete: ImageView = view.findViewById(R.id.iv_delete)
     }
 
@@ -26,22 +29,21 @@ class GeofenceAdapter(
     }
 
     override fun onBindViewHolder(holder: GeofenceViewHolder, position: Int) {
-        val item = geofenceList[position]
+        val row = rows[position]
+        holder.name.text = row.place.name
+        holder.subtitle.text = listOfNotNull(
+            if (row.isMine) "Yours" else "By someone else",
+            if (row.place.isPublic) "Public" else "Private",
+            row.distanceM?.let { formatDistance(it) }
+        ).joinToString(" · ")
 
-        holder.name.text = item.name
-
-        // Click opens details
-        holder.itemView.setOnClickListener {
-            onClick(item)
-        }
-
-        // Delete button
-        holder.delete.setOnClickListener {
-            onDelete(item)
-        }
+        holder.itemView.setOnClickListener { onClick(row.place) }
+        holder.delete.visibility = if (row.isMine) View.VISIBLE else View.GONE
+        holder.delete.setOnClickListener { onDelete(row.place) }
     }
 
-    override fun getItemCount(): Int = geofenceList.size
+    override fun getItemCount(): Int = rows.size
 
-
+    private fun formatDistance(m: Double) =
+        if (m < 1000) "${m.toInt()} m away" else "%.1f km away".format(m / 1000)
 }

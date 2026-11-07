@@ -1,0 +1,13 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "geofence_areas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "visibility", "order": "ASCENDING" },
+        { "fieldPath": "geohash", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

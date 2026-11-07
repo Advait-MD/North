@@ -1,0 +1,32 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Bytes for geofence_areas/{placeId}/entities/{fileId}.
+    match /places/{placeId}/{fileId} {
+
+      function isPlaceOwner() {
+        return request.auth != null
+          && firestore.get(/databases/(default)/documents/geofence_areas/$(placeId)).data.ownerId
+             == request.auth.uid;
+      }
+
+      // Owners only. Visitors download through a signed URL from getFileAccessUrl,
+      // which checks they are physically at the place.
+      allow read: if isPlaceOwner();
+
+      // Keep in sync with PlaceRepository.MAX_UPLOAD_BYTES.
+      allow create: if isPlaceOwner()
+        && request.resource.size < 50 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*|video/.*|application/pdf');
+
+      allow update: if false;
+      allow delete: if isPlaceOwner();
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
