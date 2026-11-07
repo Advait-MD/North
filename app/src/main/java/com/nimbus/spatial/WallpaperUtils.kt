@@ -1,54 +1,24 @@
-package com.nimbus.spatial // Change to match your package
+package com.nimbus.spatial
 
 import android.app.WallpaperManager
 import android.content.Context
-import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.graphics.Canvas
-import android.graphics.Color
-import android.os.Build
+import android.util.Log
+import androidx.annotation.DrawableRes
 import java.io.IOException
 
 object WallpaperUtils {
 
-    // Change both wallpaper and lockscreen to the provided image resource
-    fun setWallpaper(context: Context, imageResId: Int) {
-        val wallpaperManager = WallpaperManager.getInstance(context)
-        val bitmap = BitmapFactory.decodeResource(context.resources, imageResId)
-
+    /** Sets both the home and lock-screen wallpaper. Decodes a bitmap, so call off the main thread. */
+    fun setWallpaper(context: Context, @DrawableRes imageResId: Int) {
+        val bitmap = BitmapFactory.decodeResource(context.resources, imageResId) ?: return
         try {
-            // Set wallpaper
-            wallpaperManager.setBitmap(bitmap, null, true, WallpaperManager.FLAG_SYSTEM)
-
-            // Set lockscreen wallpaper (only works on API 24+)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                wallpaperManager.setBitmap(bitmap, null, true, WallpaperManager.FLAG_LOCK)
-            }
+            WallpaperManager.getInstance(context)
+                .setBitmap(bitmap, null, true, WallpaperManager.FLAG_SYSTEM or WallpaperManager.FLAG_LOCK)
         } catch (e: IOException) {
-            e.printStackTrace()
-        }
-    }
-
-    // Generate and set a pure black wallpaper + lockscreen
-    fun setBlackWallpaper(context: Context) {
-        val displayMetrics = context.resources.displayMetrics
-        val width = displayMetrics.widthPixels
-        val height = displayMetrics.heightPixels
-
-        val blackBitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(blackBitmap)
-        canvas.drawColor(Color.BLACK)
-
-        val wallpaperManager = WallpaperManager.getInstance(context)
-
-        try {
-            wallpaperManager.setBitmap(blackBitmap, null, true, WallpaperManager.FLAG_SYSTEM)
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                wallpaperManager.setBitmap(blackBitmap, null, true, WallpaperManager.FLAG_LOCK)
-            }
-        } catch (e: IOException) {
-            e.printStackTrace()
+            Log.e("WallpaperUtils", "Failed to set wallpaper", e)
+        } catch (e: SecurityException) {
+            Log.e("WallpaperUtils", "Not allowed to set wallpaper", e)
         }
     }
 }

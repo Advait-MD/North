@@ -1,23 +1,12 @@
-<resources xmlns:tools="http://schemas.android.com/tools">
+<resources>
 
-    <!-- Main App Theme -->
     <style name="Theme.Nimbus" parent="Theme.MaterialComponents.DayNight.NoActionBar">
-        <!-- Customize your theme here -->
         <item name="colorPrimary">#020202</item>
         <item name="colorPrimaryVariant">#090909</item>
         <item name="colorOnPrimary">#FFFFFF</item>
         <item name="colorSecondary">#021890</item>
         <item name="colorOnSecondary">#F6F5F5</item>
-        <item name="android:statusBarColor" tools:targetApi="l">#090909</item>
-    </style>
-
-    <!-- Translucent Theme for LoginActivity (frosted glass effect) -->
-    <style name="Theme.Nimbus.LoginTransparent" parent="Theme.MaterialComponents.DayNight.NoActionBar">
-        <item name="android:windowIsTranslucent">true</item>
-        <item name="android:windowBackground">@android:color/transparent</item>
-        <item name="android:windowContentOverlay">@null</item>
-        <item name="android:backgroundDimEnabled">false</item>
-        <item name="android:statusBarColor" tools:targetApi="l">#00000000</item>
+        <item name="android:statusBarColor">#090909</item>
     </style>
 
 </resources>

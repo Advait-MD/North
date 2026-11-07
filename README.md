@@ -50,20 +50,23 @@ and Firebase (Auth and Firestore).
   device and can be opened with any gallery or file manager. GPS can also be
   spoofed with mock-location apps.
 - Attached files are device-local URIs, so they don't sync between devices.
-- Geofences are cleared by Android on reboot and are re-registered the next
-  time the app is opened.
-- Geofence events in the background need **"Allow all the time"** location access.
+  Deleting a geofence removes its file records, not the files themselves.
+- Geofence events in the background need **"Allow all the time"** location access,
+  and Play Services can deliver them a few minutes late.
 
 ## Project layout
 
 | File | Responsibility |
 |---|---|
-| `LoginActivity.kt` | Email/password sign-in |
-| `MainActivity.kt` | Permissions, location updates, creating, listing, registering and deleting geofences |
-| `GeofenceDetailActivity.kt` | Attaching and listing files for one geofence |
-| `GeofenceBroadcastReceiver.kt` | Handles ENTER/EXIT transitions |
-| `GeofenceState.kt` / `GeofenceStateStore.kt` | Which fences the user is currently inside (pure logic + persistence) |
-| `LocationService.kt` | Foreground location service |
+| `LoginActivity.kt` | Email/password sign-in and sign-up (separate actions) |
+| `MainActivity.kt` | Permissions, creating, listing and deleting geofences |
+| `GeofenceDetailActivity.kt` | Attaching and opening files for one geofence; locks/unlocks live |
+| `GeofenceRepository.kt` | All Firestore reads/writes, always scoped to the signed-in user |
+| `GeofenceRegistrar.kt` | Registering/removing fences with the Play Services Geofencing API |
+| `GeofenceBroadcastReceiver.kt` | ENTER/EXIT transitions: state, wallpaper, notification |
+| `GeofenceBootReceiver.kt` | Re-registers fences after reboot or app update |
+| `GeofenceState.kt` / `GeofenceStateStore.kt` | Which fences the user is inside (pure logic + persistence) |
+| `LocationService.kt` | Low-power foreground location request that keeps geofencing responsive |
 | `WallpaperUtils.kt` | Wallpaper switching |
 | `firestore.rules` | Firestore security rules (per-user ownership) |
 

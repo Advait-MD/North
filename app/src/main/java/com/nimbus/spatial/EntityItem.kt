@@ -1,9 +1,8 @@
-// EntityItem.kt
 package com.nimbus.spatial
 
+/** A file attached to a geofence. [uri] is an on-device content:// URI. */
 data class EntityItem(
-  val fileName: String,
-  val localUri: String,
-  val mimeType: String,
-  val isAccessible: Boolean
+    val fileName: String,
+    val uri: String,
+    val mimeType: String
 )

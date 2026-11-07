@@ -30,7 +30,9 @@ await t('bob cannot list alice entities', assertFails(getDocs(collection(bob, 'g
 await t('alice attaches file to own fence', assertSucceeds(addDoc(collection(alice, 'geofences/aliceHome/entities'), { ownerId: 'alice', fileName: 'b.jpg' })));
 await t('alice cannot attach to bob fence', assertFails(addDoc(collection(alice, 'geofences/bobHome/entities'), { ownerId: 'alice' })));
 await t('alice cannot attach to nonexistent fence', assertFails(addDoc(collection(alice, 'geofences/nope/entities'), { ownerId: 'alice' })));
-await t('alice can delete own area', assertSucceeds(deleteDoc(doc(alice, 'geofence_areas/aliceWork'))));
+await t('bob cannot delete alice entity', assertFails(deleteDoc(doc(bob, 'geofences/aliceHome/entities/e1'))));
+await t('alice deletes own entity (area delete cascade)', assertSucceeds(deleteDoc(doc(alice, 'geofences/aliceHome/entities/e1'))));
+await t('alice can delete own area',assertSucceeds(deleteDoc(doc(alice, 'geofence_areas/aliceWork'))));
 await env.cleanup();
 for (const r of results) console.log(r.join('  '));
 console.log(`${results.filter(r=>r[0]==='PASS').length}/${results.length} passed`);

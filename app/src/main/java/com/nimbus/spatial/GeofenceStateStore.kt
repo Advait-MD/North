@@ -27,6 +27,20 @@ object GeofenceStateStore {
         prefs(context).edit().remove(KEY_INSIDE_IDS).commit()
     }
 
+    /** Calls [onChange] (on the main thread) whenever the inside-state changes. */
+    fun addListener(context: Context, onChange: () -> Unit): SharedPreferences.OnSharedPreferenceChangeListener {
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == null || key == KEY_INSIDE_IDS) onChange() // key is null after clear()
+        }
+        // SharedPreferences holds listeners weakly, so the caller must keep the returned reference.
+        prefs(context).registerOnSharedPreferenceChangeListener(listener)
+        return listener
+    }
+
+    fun removeListener(context: Context, listener: SharedPreferences.OnSharedPreferenceChangeListener) {
+        prefs(context).unregisterOnSharedPreferenceChangeListener(listener)
+    }
+
     private fun update(context: Context, transform: (Set<String>) -> Set<String>): Set<String> =
         synchronized(lock) {
             val prefs = prefs(context)

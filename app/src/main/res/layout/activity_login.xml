@@ -17,9 +17,6 @@
         android:layout_marginBottom="40dp"
         android:src="@drawable/ic_northstar"/>
 
-    <!-- Login Container -->
-
-
     <EditText
         android:id="@+id/emailEditText"
         android:layout_width="match_parent"
@@ -52,5 +49,14 @@
         android:padding="12dp"
         android:background="#070707"
         android:textColor="@android:color/white" />
+
+    <Button
+        android:id="@+id/createAccountButton"
+        style="?attr/borderlessButtonStyle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="Create account"
+        android:textColor="#AAAAAA" />
 
 </LinearLayout>
