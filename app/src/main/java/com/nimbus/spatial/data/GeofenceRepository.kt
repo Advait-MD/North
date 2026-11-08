@@ -12,7 +12,8 @@ import com.google.firebase.firestore.FirebaseFirestore
  *
  * Firestore layout:
  *   geofence_areas/{areaId}                 -> GeofenceArea
- *   geofences/{areaId}/entities/{fileId}    -> {fileName, localUri, mimeType, timestamp, ownerId}
+ *   geofences/{areaId}/entities/{fileId}    -> {fileName, mimeType, timestamp, ownerId, encrypted}
+ *     (files attached before encryption have localUri instead of encrypted)
  */
 object GeofenceRepository {
     private const val MAX_WRITES_PER_BATCH = 450 // Firestore allows 500
@@ -51,20 +52,21 @@ object GeofenceRepository {
                 AttachedFile(
                     id = doc.id,
                     name = doc.getString("fileName") ?: "Unknown",
-                    uri = doc.getString("localUri").orEmpty(),
-                    mimeType = doc.getString("mimeType") ?: DEFAULT_MIME_TYPE
+                    mimeType = doc.getString("mimeType") ?: DEFAULT_MIME_TYPE,
+                    legacyUri = doc.getString("localUri")
                 )
             }
         }
 
-    fun addFile(areaId: String, ownerId: String, file: AttachedFile): Task<DocumentReference> =
-        files(areaId).add(
+    /** Saves metadata for a file already encrypted into FileVault under [AttachedFile.id]. */
+    fun addEncryptedFile(areaId: String, ownerId: String, file: AttachedFile): Task<Void> =
+        files(areaId).document(file.id).set(
             mapOf(
                 "fileName" to file.name,
-                "localUri" to file.uri,
                 "mimeType" to file.mimeType,
                 "timestamp" to System.currentTimeMillis(),
-                "ownerId" to ownerId
+                "ownerId" to ownerId,
+                "encrypted" to true
             )
         )
 

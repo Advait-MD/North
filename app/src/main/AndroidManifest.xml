@@ -44,6 +44,18 @@
             android:foregroundServiceType="location"
             android:exported="false" />
 
+        <!-- Lets a viewer app read a temporarily decrypted file. Not exported: access is only
+             granted per file, per Intent, via FLAG_GRANT_READ_URI_PERMISSION. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
         <activity android:name=".ui.GeofenceDetailActivity" />
 
         <activity android:name=".ui.LoginActivity" />

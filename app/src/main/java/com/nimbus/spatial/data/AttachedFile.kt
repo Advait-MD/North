@@ -1,12 +1,18 @@
 package com.nimbus.spatial.data
 
 /**
- * A file on this phone that the user attached to a geofence.
- * Stored in Firestore at `geofences/{areaId}/entities/{id}`; the file itself never leaves the phone.
+ * A file attached to a geofence. Firestore stores only its metadata at
+ * `geofences/{areaId}/entities/{id}`; the encrypted contents are in FileVault on this phone.
  */
 data class AttachedFile(
-    val id: String, // Firestore document ID; empty until saved
+    val id: String, // Firestore document ID, also the encrypted file's name in FileVault
     val name: String,
-    val uri: String, // content:// URI, only valid on this device
-    val mimeType: String
-)
+    val mimeType: String,
+    /**
+     * Set only for files attached before encryption existed: a plain content:// URI to the
+     * unencrypted original. Null for every encrypted file.
+     */
+    val legacyUri: String? = null
+) {
+    val isEncrypted: Boolean get() = legacyUri == null
+}

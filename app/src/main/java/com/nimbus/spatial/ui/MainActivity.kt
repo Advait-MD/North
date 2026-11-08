@@ -21,6 +21,7 @@ import com.nimbus.spatial.data.GeofenceRepository
 import com.nimbus.spatial.geofence.GeofenceRegistrar
 import com.nimbus.spatial.geofence.GeofenceStateStore
 import com.nimbus.spatial.geofence.LocationService
+import com.nimbus.spatial.security.FileVault
 import java.util.UUID
 
 /** Home screen: create a geofence where you're standing, and list, open or delete your geofences. */
@@ -48,6 +49,7 @@ class MainActivity : AppCompatActivity() {
             return
         }
         userId = user.uid
+        FileVault.clearDecrypted(this) // leftovers from a viewer the app never came back from
 
         setContentView(R.layout.activity_main)
         setUpViews()
@@ -158,17 +160,16 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun openGeofence(area: GeofenceArea) {
-        startActivity(
-            Intent(this, GeofenceDetailActivity::class.java)
-                .putExtra(GeofenceDetailActivity.EXTRA_GEOFENCE_ID, area.id)
-                .putExtra(GeofenceDetailActivity.EXTRA_GEOFENCE_NAME, area.name)
-        )
+        startActivity(GeofenceDetailActivity.intent(this, area))
     }
 
     private fun confirmDelete(area: GeofenceArea) {
         AlertDialog.Builder(this)
             .setTitle("Delete ${area.name}?")
-            .setMessage("The files on your phone are kept, but they'll no longer be attached to this place.")
+            .setMessage(
+                "This permanently deletes North's encrypted copies of its files. " +
+                    "Originals you kept in your gallery or files aren't touched."
+            )
             .setPositiveButton("Delete") { _, _ -> deleteGeofence(area) }
             .setNegativeButton("Cancel", null)
             .show()
@@ -179,6 +180,8 @@ class MainActivity : AppCompatActivity() {
             .addOnSuccessListener {
                 GeofenceRegistrar.remove(this, area.id)
                 GeofenceStateStore.exit(this, listOf(area.id))
+                val vault = FileVault(this, userId)
+                Thread { vault.deleteArea(area.id) }.start() // disk I/O off the main thread
                 val index = geofences.indexOfFirst { it.id == area.id }
                 if (index != -1) {
                     geofences.removeAt(index)
@@ -195,6 +198,7 @@ class MainActivity : AppCompatActivity() {
         // The next account on this phone must not inherit this user's fences or saved state.
         GeofenceRegistrar.removeAll(this)
         GeofenceStateStore.clear(this)
+        FileVault.clearDecrypted(this)
         stopService(Intent(this, LocationService::class.java))
         FirebaseAuth.getInstance().signOut()
         openLogin()

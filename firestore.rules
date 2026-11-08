@@ -17,6 +17,14 @@ service cloud.firestore {
       return signedIn() && request.resource.data.ownerId == request.auth.uid;
     }
 
+    // Radius bounds: the app offers 10-200 m. A huge fence would make its files openable anywhere.
+    function validNewArea() {
+      let radius = request.resource.data.radius;
+      return radius is number && radius > 0 && radius <= 1000
+        && request.resource.data.latitude is number
+        && request.resource.data.longitude is number;
+    }
+
     function ownsArea(areaId) {
       let path = /databases/$(database)/documents/geofence_areas/$(areaId);
       return exists(path) && get(path).data.ownerId == request.auth.uid;
@@ -24,16 +32,18 @@ service cloud.firestore {
 
     match /geofence_areas/{areaId} {
       allow read, delete: if ownsExisting();
-      allow create: if ownsIncoming();
-      // ownerId can't be changed: both old and new must be the caller.
-      allow update: if ownsExisting() && ownsIncoming();
+      allow create: if ownsIncoming() && validNewArea();
+      // A fence can be renamed but never moved, resized or given away: moving a fence to
+      // wherever you're standing would unlock its files.
+      allow update: if ownsExisting()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name']);
     }
 
     match /geofences/{geofenceId}/entities/{entityId} {
       allow read, delete: if ownsExisting();
       // Files can only be attached to a geofence the caller owns.
       allow create: if ownsIncoming() && ownsArea(geofenceId);
-      allow update: if ownsExisting() && ownsIncoming();
+      // No updates: the app never edits a file record, so nobody else should either.
     }
 
     // Everything else is denied by default.

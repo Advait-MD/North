@@ -17,12 +17,14 @@ Built with Kotlin, Google Play Services geofencing, and Firebase (Auth + Firesto
 1. **Sign in** with email and password (Firebase Auth).
 2. **Create a geofence**: pick a radius, tap *Create Geofence*, and name it.
    North takes one GPS fix, saves the fence to Firestore, and registers it with Play Services.
-3. **Attach files**: open a fence and tap **+**. Only the file's name, type and on-device
-   `content://` URI go to Firestore. **The file itself never leaves the phone.**
+3. **Attach files**: open a fence and tap **+**. North encrypts a copy into its private storage,
+   then offers to delete the original. Only the file's name and type go to Firestore.
+   **The file itself never leaves the phone.**
 4. **Walk in or out**: Play Services wakes `GeofenceBroadcastReceiver`, which records which
    fences you're inside, then updates the wallpaper and posts a notification.
-5. **Open files**: tap a file. It opens only while you're inside its fence.
-   Long-press a file to detach it.
+5. **Open files**: tap a file. North checks that you're inside the fence (twice, see
+   [Security model](#security-model)), decrypts a temporary copy, and opens it in a viewer app.
+   Long-press a file to remove it.
 
 ```text
  MainActivity ──create/delete──▶ GeofenceRepository ──▶ Firestore
@@ -39,7 +41,7 @@ Built with Kotlin, Google Play Services geofencing, and Firebase (Auth + Firesto
 
 ## Code map
 
-All code lives in `app/src/main/java/com/nimbus/spatial/`, in three packages.
+All code lives in `app/src/main/java/com/nimbus/spatial/`, in four packages.
 
 ### `ui/` — screens
 
@@ -48,6 +50,8 @@ All code lives in `app/src/main/java/com/nimbus/spatial/`, in three packages.
 | `LoginActivity.kt` | Sign in / create account |
 | `MainActivity.kt` | Home screen: create, list and delete geofences; log out |
 | `GeofenceDetailActivity.kt` | One fence's files: attach, open (only when inside), remove |
+| `GatedFileOpener.kt` | Opening a file: both security gates, then decrypt and view |
+| `OriginalFileCleanup.kt` | Offers to delete the unencrypted original after attaching |
 | `LocationPermissions.kt` | The two-step location permission flow |
 | `GeofenceAdapter.kt`, `AttachedFileAdapter.kt` | The two lists |
 | `Toasts.kt` | `context.toast("...")` helper |
@@ -64,6 +68,15 @@ All code lives in `app/src/main/java/com/nimbus/spatial/`, in three packages.
 | `LocationService.kt` | Low-power location request that makes fence events arrive sooner |
 | `Notifications.kt`, `Wallpaper.kt` | What happens when you cross a fence |
 
+### `security/` — encryption and the location gate
+
+| File | What it does |
+|---|---|
+| `FileVault.kt` | Encrypts/decrypts attached files (Jetpack Security `EncryptedFile`) and pins each fence's location |
+| `LiveLocationGate.kt` | Takes a fresh location fix and rejects mock locations |
+| `FenceCheck.kt` | Pure decision: inside, outside, mock or too imprecise (unit-tested) |
+| `SafeFileName.kt` | Makes file names safe to use on disk (unit-tested) |
+
 ### `data/` — Firestore
 
 | File | What it does |
@@ -75,7 +88,7 @@ Firestore layout (secured by `firestore.rules`, where each user only sees their 
 
 ```text
 geofence_areas/{areaId}                 id, name, latitude, longitude, radius, ownerId
-geofences/{areaId}/entities/{fileId}    fileName, localUri, mimeType, timestamp, ownerId
+geofences/{areaId}/entities/{fileId}    fileName, mimeType, timestamp, ownerId, encrypted
 ```
 
 ## Where to change things
@@ -89,15 +102,47 @@ geofences/{areaId}/entities/{fileId}    fileName, localUri, mimeType, timestamp,
 | Which file types can be attached | `pickFile.launch(...)` in `GeofenceDetailActivity` |
 | What data is stored | `data/GeofenceRepository.kt` (and update `firestore.rules`) |
 | Battery vs. responsiveness | the location request in `geofence/LocationService.kt` |
+| How strict the live location check is | `MAX_ACCURACY_METERS` and `classify()` in `security/FenceCheck.kt` |
+| The encryption library | only `security/FileVault.kt` uses it |
 
-## Honest limitations
+## Security model
 
-- **The "lock" is a UI gate, not encryption.** Files stay unencrypted on the phone and can be
-  opened with any gallery or file manager. GPS can be spoofed with mock-location apps.
-- Attached files are on-device URIs, so they don't sync between phones.
-- Background geofence events need **"Allow all the time"** location access, and Play Services
-  can deliver them a few minutes late.
-- North overwrites your wallpaper; it doesn't restore the previous one.
+**Threat model:** someone else gets hold of your unlocked phone, or knows your account password,
+and wants to read your files while away from the place you tied them to.
+
+### What protects your files
+
+| Gate | Where | What it stops |
+|---|---|---|
+| **Encryption at rest** | `FileVault` | Files are stored as AES-256-GCM `EncryptedFile`s in app-private storage. The key lives in the Android Keystore (hardware-backed where available) and can't be exported, so copying the vault folder, or restoring it on another phone, yields nothing readable. |
+| **Original removed** | `OriginalFileCleanup` | After encrypting, North offers to delete the original from the gallery or files. If you keep it, anyone can still open that copy. |
+| **Gate 1: saved state** | `GatedFileOpener` | Files only open if geofence events say you're inside the fence. |
+| **Gate 2: live location** | `LiveLocationGate`, `FenceCheck` | A fresh fix is taken on every open. Mock locations and fixes less precise than 100 m are rejected. |
+| **Pinned fence location** | `FileVault.pinFence` | Gate 2 checks against where the fence was when its first file was attached, stored encrypted on the phone. Moving, enlarging or deleting-and-recreating the fence in Firestore doesn't move where files unlock. |
+| **Firestore rules** | `firestore.rules` | Users only see their own data. Fences can be renamed but never moved, enlarged (max 1 km) or given away. File records can't be edited. |
+| **Short-lived plaintext** | `FileVault.clearDecrypted` | A decrypted copy exists only while a viewer shows it. It's wiped when you come back to North, when you leave the fence, and on reboot or the next app start. It's shared only with that one viewer, via a non-exported `FileProvider`. |
+| **Less leakage** | various | The file screen blocks screenshots and recent-apps previews (`FLAG_SECURE`). Lock-screen notifications hide place names. Backups and device transfers exclude North's data. |
+
+### What it does *not* protect against
+
+- **A rooted phone, or one with an unlocked bootloader.** Root can read app memory, hide mock
+  locations from North, and use the Keystore key through North's own process. Nothing in an app
+  can fully defend against that.
+- **The viewer app.** Once a file is decrypted for viewing, the viewer can save or share it. A
+  viewer that already has the file open can also keep showing it after North wipes the copy.
+- **Originals you chose to keep**, and **files attached before encryption existed**. Those are
+  marked "(not encrypted)" in the list; remove and re-attach them to protect them.
+- **Someone standing inside the fence with your unlocked phone.** That's the intended way to get in.
+- **File names and fence locations** are stored in Firestore unencrypted (only you can read them).
+
+### Notes for maintainers
+
+- `androidx.security:security-crypto` 1.1.0 is deprecated upstream and won't get new releases.
+  It works, and everything that uses it is in `security/FileVault.kt`, so replacing it (for example
+  with direct Android Keystore + AES-GCM) only touches that file. Keep the on-disk format readable
+  or add a migration, or users lose their files.
+- Encrypted files are only on the phone that attached them. Reinstalling the app, or clearing its
+  data, destroys the key and therefore the files. Tell users before they delete originals.
 
 ## Setup
 

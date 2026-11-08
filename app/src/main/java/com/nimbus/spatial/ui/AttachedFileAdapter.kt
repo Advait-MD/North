@@ -34,7 +34,8 @@ class AttachedFileAdapter(
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         val file = files[position]
-        holder.name.text = file.name
+        // Files attached before encryption existed are still readable outside North; say so.
+        holder.name.text = if (file.isEncrypted) file.name else "${file.name} (not encrypted, re-attach to protect)"
         holder.itemView.alpha = if (unlocked) 1.0f else 0.5f
         holder.lockIcon.visibility = if (unlocked) View.GONE else View.VISIBLE
         holder.itemView.setOnClickListener {

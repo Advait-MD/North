@@ -28,12 +28,20 @@ object Notifications {
             return
         }
         createChannel(context, ALERT_CHANNEL_ID, "North Geofence Alerts", NotificationManager.IMPORTANCE_HIGH)
+        // What a locked phone shows: no place names, which would reveal where the user is.
+        val lockScreenVersion = NotificationCompat.Builder(context, ALERT_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_northstar)
+            .setContentTitle("North")
+            .setContentText("Geofence update")
+            .build()
         val notification = NotificationCompat.Builder(context, ALERT_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_northstar)
             .setContentTitle("North")
             .setContentText(message)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setPublicVersion(lockScreenVersion)
             .build()
         NotificationManagerCompat.from(context).notify(areaId.hashCode(), notification)
     }

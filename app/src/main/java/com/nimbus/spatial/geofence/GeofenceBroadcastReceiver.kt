@@ -10,6 +10,7 @@ import com.google.android.gms.location.GeofencingEvent
 import com.google.android.gms.tasks.Tasks
 import com.nimbus.spatial.R
 import com.nimbus.spatial.data.GeofenceRepository
+import com.nimbus.spatial.security.FileVault
 import java.util.concurrent.TimeUnit
 
 /** Receives ENTER/EXIT events from Play Services: updates the saved state, wallpaper and notifications. */
@@ -23,6 +24,7 @@ class GeofenceBroadcastReceiver : BroadcastReceiver() {
                 // Location was turned off and Android dropped every fence, so the saved state is stale.
                 // MainActivity re-registers the fences the next time the app opens.
                 GeofenceStateStore.clear(context)
+                FileVault.clearDecrypted(context)
             }
             return
         }
@@ -56,6 +58,9 @@ class GeofenceBroadcastReceiver : BroadcastReceiver() {
         // Fences are re-registered on every app launch and after a reboot, and Play Services then
         // repeats ENTER for fences the user is already inside. Those repeats change nothing.
         if (change.changedIds.isEmpty()) return
+
+        // Leaving a fence wipes any of its files that are decrypted for a viewer app right now.
+        if (!entered) change.changedIds.forEach { FileVault.clearDecrypted(context, it) }
 
         if (change.insideAnyChanged) {
             Wallpaper.set(context, if (change.after.isEmpty()) R.drawable.out_fence else R.drawable.in_fence)

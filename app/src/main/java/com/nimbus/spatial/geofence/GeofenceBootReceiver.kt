@@ -6,6 +6,7 @@ import android.content.Intent
 import android.util.Log
 import com.google.firebase.auth.FirebaseAuth
 import com.nimbus.spatial.data.GeofenceRepository
+import com.nimbus.spatial.security.FileVault
 
 /** Android deletes every geofence on reboot. This puts the signed-in user's fences back. */
 class GeofenceBootReceiver : BroadcastReceiver() {
@@ -19,6 +20,7 @@ class GeofenceBootReceiver : BroadcastReceiver() {
         // The user may have moved while the phone was off. Once the fences are registered,
         // Play Services sends ENTER for the ones they're actually inside.
         GeofenceStateStore.clear(appContext)
+        FileVault.clearDecrypted(appContext)
 
         val userId = FirebaseAuth.getInstance().currentUser?.uid ?: return
         if (!GeofenceRegistrar.canRegister(appContext)) return
