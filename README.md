@@ -6,22 +6,29 @@ North is an Android app that ties files on your phone to places. You draw a
 circular **geofence** around where you're standing, attach images, videos or
 PDFs to it, and those files can only be opened from the app while you're
 inside that area. When you enter or leave a geofence, North posts a
-notification and (optionally) swaps your wallpaper for one you choose.
+notification and swaps your wallpaper (on by default; you can turn it off or pick your own pictures).
 
-Built with Kotlin, Google Play Services geofencing, and Firebase (Auth + Firestore).
+Built with Kotlin, Google Play Services geofencing, Firebase (Auth + Firestore),
+Jetpack Security (file encryption) and Material 3.
+
+> **Status:** the current version (fixes, encryption, new UI) has not yet been built or tested on
+> a device. This README describes what the code is written to do. Remove this note once it has
+> been built and checked on a phone.
 
 ---
 
 ## How it works
 
 1. **Sign in** with email and password (Firebase Auth).
-2. **Create a geofence**: pick a radius, tap *Create Geofence*, and name it.
+2. **Create a place**: pick a radius, tap *Create place here*, and name it.
    North takes one GPS fix, saves the fence to Firestore, and registers it with Play Services.
-3. **Attach files**: open a fence and tap **+**. North encrypts a copy into its private storage,
-   then offers to delete the original. Only the file's name and type go to Firestore.
+3. **Attach files**: open a place and tap *Attach file*. North encrypts a copy into its private
+   storage, then offers to delete the original. Firestore only gets the file's name, type, a
+   timestamp, your user ID and an "encrypted" flag.
    **The file itself never leaves the phone.**
 4. **Walk in or out**: Play Services wakes `GeofenceBroadcastReceiver`, which records which
-   places you're inside, posts a notification and, if you've switched it on, changes the wallpaper.
+   places you're inside, posts a notification and changes the wallpaper (unless you've turned that
+   off). Repeated events for a place you're already in are ignored.
 5. **Open files**: tap a file. North checks that you're inside the fence (twice, see
    [Security model](#security-model)), decrypts a temporary copy, and opens it in a viewer app.
    Long-press a file to remove it.
@@ -81,7 +88,7 @@ All code lives in `app/src/main/java/com/nimbus/spatial/`, in five packages.
 | `GeofenceBootReceiver.kt` | Re-registers fences after a reboot or app update |
 | `GeofenceState.kt` | Pure logic: which fences you're inside, and what changed (unit-tested) |
 | `GeofenceStateStore.kt` | Saves that state so it survives the app being killed |
-| `LocationService.kt` | Low-power location request that makes fence events arrive sooner |
+| `LocationService.kt` | Keeps a low-power location request running, intended to make fence events arrive sooner |
 | `Notifications.kt` | The arrival/leaving notification and the service notification |
 
 ### `wallpaper/` — the optional wallpaper change
@@ -146,7 +153,7 @@ and wants to read your files while away from the place you tied them to.
 | **Gate 2: live location** | `LiveLocationGate`, `FenceCheck` | A fresh fix is taken on every open. Mock locations and fixes less precise than 100 m are rejected. |
 | **Pinned fence location** | `FileVault.pinFence` | Gate 2 checks against where the fence was when its first file was attached, stored encrypted on the phone. Moving, enlarging or deleting-and-recreating the fence in Firestore doesn't move where files unlock. |
 | **Firestore rules** | `firestore.rules` | Users only see their own data. Fences can be renamed but never moved, enlarged (max 1 km) or given away. File records can't be edited. |
-| **Short-lived plaintext** | `FileVault.clearDecrypted` | A decrypted copy exists only while a viewer shows it. It's wiped when you come back to North, when you leave the fence, and on reboot or the next app start. It's shared only with that one viewer, via a non-exported `FileProvider`. |
+| **Short-lived plaintext** | `FileVault.clearDecrypted` | Opening a file writes a temporary decrypted copy to North's private cache. It's wiped when you return to that place's screen, when you leave the place, when you log out, and on the next app start or reboot. Until then it stays on disk, for example if you press Home in the viewer and walk away. It's shared only with that one viewer, via a non-exported `FileProvider`. |
 | **Less leakage** | various | The file screen blocks screenshots and recent-apps previews (`FLAG_SECURE`). Lock-screen notifications hide place names. Backups and device transfers exclude North's data. |
 
 ### What it does *not* protect against
@@ -156,8 +163,8 @@ and wants to read your files while away from the place you tied them to.
   can fully defend against that.
 - **The viewer app.** Once a file is decrypted for viewing, the viewer can save or share it. A
   viewer that already has the file open can also keep showing it after North wipes the copy.
-- **Originals you chose to keep**, and **files attached before encryption existed**. Those are
-  marked "(not encrypted)" in the list; remove and re-attach them to protect them.
+- **Originals you chose to keep**, and **files attached before encryption existed**. The latter are
+  labelled "Not encrypted" in red in the list; remove and attach them again to protect them.
 - **Someone standing inside the fence with your unlocked phone.** That's the intended way to get in.
 - **File names and fence locations** are stored in Firestore unencrypted (only you can read them).
 
@@ -186,7 +193,7 @@ and wants to read your files while away from the place you tied them to.
 
 ## Tests
 
-Unit tests (the inside/outside state logic):
+Unit tests (inside/outside state, the live-location decision, and file-name sanitising):
 
 ```bash
 ./gradlew testDebugUnitTest
