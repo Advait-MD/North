@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/loginRoot"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
@@ -8,9 +7,8 @@
     android:background="#000000"
     android:padding="32dp">
 
-    <!-- App Logo at the top -->
     <ImageView
-        android:id="@+id/appLogo"
+        android:id="@+id/iv_logo"
         android:layout_width="100dp"
         android:layout_height="100dp"
         android:layout_gravity="center"
@@ -18,7 +16,7 @@
         android:src="@drawable/ic_northstar"/>
 
     <EditText
-        android:id="@+id/emailEditText"
+        android:id="@+id/et_email"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:hint="Email"
@@ -30,7 +28,7 @@
         android:layout_marginBottom="16dp" />
 
     <EditText
-        android:id="@+id/passwordEditText"
+        android:id="@+id/et_password"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:hint="Password"
@@ -42,16 +40,16 @@
         android:layout_marginBottom="24dp" />
 
     <Button
-        android:id="@+id/loginButton"
+        android:id="@+id/btn_sign_in"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="LOGIN"
+        android:text="Sign in"
         android:padding="12dp"
         android:background="#070707"
         android:textColor="@android:color/white" />
 
     <Button
-        android:id="@+id/createAccountButton"
+        android:id="@+id/btn_create_account"
         style="?attr/borderlessButtonStyle"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"

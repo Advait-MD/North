@@ -14,7 +14,7 @@
         android:visibility="gone" />
 
     <TextView
-        android:id="@+id/tv_entity_name"
+        android:id="@+id/tv_file_name"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"

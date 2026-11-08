@@ -33,7 +33,7 @@
         android:textSize="16sp" />
 
     <com.google.android.material.slider.Slider
-        android:id="@+id/seekbar_radius"
+        android:id="@+id/slider_radius"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginBottom="16dp"
@@ -48,9 +48,9 @@
         android:text="Create Geofence"
         android:layout_marginBottom="16dp" />
 
-    <!-- Dropdown Label -->
+    <!-- List of geofences -->
     <TextView
-        android:id="@+id/tv_dropdown_label"
+        android:id="@+id/tv_list_label"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="Your Geofences"
@@ -60,7 +60,6 @@
         android:layout_marginBottom="8dp"
         android:textColor="#000000"/>
 
-    <!-- RecyclerView taking remaining space -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/recycler_geofences"
         android:layout_width="match_parent"
@@ -69,7 +68,7 @@
         android:layout_marginBottom="16dp" />
 
     <Button
-        android:id="@+id/logoutButton"
+        android:id="@+id/btn_logout"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="Logout"

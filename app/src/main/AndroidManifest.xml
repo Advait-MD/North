@@ -27,11 +27,11 @@
         android:theme="@style/Theme.Nimbus">
 
         <receiver
-            android:name=".GeofenceBroadcastReceiver"
+            android:name=".geofence.GeofenceBroadcastReceiver"
             android:exported="false" />
 
         <receiver
-            android:name=".GeofenceBootReceiver"
+            android:name=".geofence.GeofenceBootReceiver"
             android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
@@ -40,16 +40,16 @@
         </receiver>
 
         <service
-            android:name=".LocationService"
+            android:name=".geofence.LocationService"
             android:foregroundServiceType="location"
             android:exported="false" />
 
-        <activity android:name=".GeofenceDetailActivity" />
+        <activity android:name=".ui.GeofenceDetailActivity" />
 
-        <activity android:name=".LoginActivity" />
+        <activity android:name=".ui.LoginActivity" />
 
         <activity
-            android:name=".MainActivity"
+            android:name=".ui.MainActivity"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
