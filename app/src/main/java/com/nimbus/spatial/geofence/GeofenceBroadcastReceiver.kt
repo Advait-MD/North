@@ -8,9 +8,9 @@ import com.google.android.gms.location.Geofence
 import com.google.android.gms.location.GeofenceStatusCodes
 import com.google.android.gms.location.GeofencingEvent
 import com.google.android.gms.tasks.Tasks
-import com.nimbus.spatial.R
 import com.nimbus.spatial.data.GeofenceRepository
 import com.nimbus.spatial.security.FileVault
+import com.nimbus.spatial.wallpaper.Wallpaper
 import java.util.concurrent.TimeUnit
 
 /** Receives ENTER/EXIT events from Play Services: updates the saved state, wallpaper and notifications. */
@@ -62,9 +62,8 @@ class GeofenceBroadcastReceiver : BroadcastReceiver() {
         // Leaving a fence wipes any of its files that are decrypted for a viewer app right now.
         if (!entered) change.changedIds.forEach { FileVault.clearDecrypted(context, it) }
 
-        if (change.insideAnyChanged) {
-            Wallpaper.set(context, if (change.after.isEmpty()) R.drawable.out_fence else R.drawable.in_fence)
-        }
+        // Only when going from "no place" to "some place" or back; does nothing if switched off in settings.
+        if (change.insideAnyChanged) Wallpaper.applyFor(context, insideAnyPlace = change.after.isNotEmpty())
         for (id in change.changedIds) {
             val name = fetchAreaName(id) ?: "a saved place"
             Notifications.showGeofenceAlert(context, id, if (entered) "You are in $name" else "You are out of $name")

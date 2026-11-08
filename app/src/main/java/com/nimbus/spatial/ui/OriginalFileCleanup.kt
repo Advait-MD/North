@@ -3,7 +3,7 @@ package com.nimbus.spatial.ui
 import android.content.Context
 import android.net.Uri
 import android.provider.DocumentsContract
-import androidx.appcompat.app.AlertDialog
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
 /**
  * After a file is encrypted into North, the original is still in the gallery or file manager,
@@ -12,7 +12,7 @@ import androidx.appcompat.app.AlertDialog
 object OriginalFileCleanup {
 
     fun offer(context: Context, original: Uri, name: String) {
-        AlertDialog.Builder(context)
+        MaterialAlertDialogBuilder(context)
             .setTitle("Delete the original?")
             .setMessage(
                 "$name is now encrypted inside North, but the original is still on your phone, " +
@@ -31,7 +31,7 @@ object OriginalFileCleanup {
         } catch (e: Exception) { // provider doesn't support deleting, or no write access
             false
         }
-        if (deleted) context.toast("Original deleted")
-        else context.toast("North can't delete it from here. Delete it in your gallery or file manager.", long = true)
+        if (deleted) context.showMessage("Original deleted")
+        else context.showMessage("North can't delete it from here. Delete it in your gallery or file manager.", long = true)
     }
 }

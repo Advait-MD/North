@@ -6,7 +6,7 @@ North is an Android app that ties files on your phone to places. You draw a
 circular **geofence** around where you're standing, attach images, videos or
 PDFs to it, and those files can only be opened from the app while you're
 inside that area. When you enter or leave a geofence, North posts a
-notification and swaps your home and lock-screen wallpaper.
+notification and (optionally) swaps your wallpaper for one you choose.
 
 Built with Kotlin, Google Play Services geofencing, and Firebase (Auth + Firestore).
 
@@ -21,10 +21,24 @@ Built with Kotlin, Google Play Services geofencing, and Firebase (Auth + Firesto
    then offers to delete the original. Only the file's name and type go to Firestore.
    **The file itself never leaves the phone.**
 4. **Walk in or out**: Play Services wakes `GeofenceBroadcastReceiver`, which records which
-   fences you're inside, then updates the wallpaper and posts a notification.
+   places you're inside, posts a notification and, if you've switched it on, changes the wallpaper.
 5. **Open files**: tap a file. North checks that you're inside the fence (twice, see
    [Security model](#security-model)), decrypts a temporary copy, and opens it in a viewer app.
    Long-press a file to remove it.
+6. **Settings** (gear icon): turn wallpaper changes on or off, choose home screen, lock screen or
+   both, and pick your own picture for "At a place" and "Elsewhere". Log out is here too.
+
+## Screens
+
+| Screen | What's on it |
+|---|---|
+| Sign in | Email and password with inline errors, separate "Create account" |
+| Home | "New place" card (radius slider, *Create place here*), your places with a **You're here** label, a banner if location access is missing |
+| Place | Teal **Unlocked** / grey **Locked** card, the files (type icon, *Encrypted* label), *Attach file* button |
+| Settings | Wallpaper switch, *Apply to* (Home / Lock / Both), two wallpaper previews with *Choose* / *Reset*, account and log out |
+
+The app says "place" everywhere a user sees; the code says "geofence". Material 3, light and dark
+theme, edge-to-edge.
 
 ```text
  MainActivity ──create/delete──▶ GeofenceRepository ──▶ Firestore
@@ -41,20 +55,22 @@ Built with Kotlin, Google Play Services geofencing, and Firebase (Auth + Firesto
 
 ## Code map
 
-All code lives in `app/src/main/java/com/nimbus/spatial/`, in four packages.
+All code lives in `app/src/main/java/com/nimbus/spatial/`, in five packages.
 
 ### `ui/` — screens
 
 | File | What it does |
 |---|---|
 | `LoginActivity.kt` | Sign in / create account |
-| `MainActivity.kt` | Home screen: create, list and delete geofences; log out |
+| `MainActivity.kt` | Home screen: create, list and delete places |
+| `SettingsActivity.kt` | Wallpaper options and account |
 | `GeofenceDetailActivity.kt` | One fence's files: attach, open (only when inside), remove |
 | `GatedFileOpener.kt` | Opening a file: both security gates, then decrypt and view |
 | `OriginalFileCleanup.kt` | Offers to delete the unencrypted original after attaching |
 | `LocationPermissions.kt` | The two-step location permission flow |
 | `GeofenceAdapter.kt`, `AttachedFileAdapter.kt` | The two lists |
-| `Toasts.kt` | `context.toast("...")` helper |
+| `Messages.kt` | `context.showMessage("...")`: a Snackbar on screen, a Toast elsewhere |
+| `Session.kt` | Logging out (and what gets cleaned up) |
 
 ### `geofence/` — background work
 
@@ -66,7 +82,14 @@ All code lives in `app/src/main/java/com/nimbus/spatial/`, in four packages.
 | `GeofenceState.kt` | Pure logic: which fences you're inside, and what changed (unit-tested) |
 | `GeofenceStateStore.kt` | Saves that state so it survives the app being killed |
 | `LocationService.kt` | Low-power location request that makes fence events arrive sooner |
-| `Notifications.kt`, `Wallpaper.kt` | What happens when you cross a fence |
+| `Notifications.kt` | The arrival/leaving notification and the service notification |
+
+### `wallpaper/` — the optional wallpaper change
+
+| File | What it does |
+|---|---|
+| `WallpaperSettings.kt` | On/off and which screens (home, lock, both) |
+| `Wallpaper.kt` | The "at a place" / "elsewhere" pictures (yours or the defaults), and applying them |
 
 ### `security/` — encryption and the location gate
 
@@ -96,9 +119,12 @@ geofences/{areaId}/entities/{fileId}    fileName, mimeType, timestamp, ownerId, 
 | To change... | Look in |
 |---|---|
 | The radius range (10–200 m) | `slider_radius` in `res/layout/activity_main.xml` |
+| Any text the user sees | `res/values/strings.xml` |
+| Colors (light and dark) | `res/values/colors.xml`, `res/values-night/colors.xml` |
 | What happens on enter/exit | `GeofenceBroadcastReceiver.handleTransition()` |
 | Notification text or channels | `geofence/Notifications.kt` |
-| The wallpapers | `res/drawable/in_fence.png`, `out_fence.png` |
+| The default wallpapers | `res/drawable/in_fence.png`, `out_fence.png` |
+| Whether wallpaper changes start on or off | `ENABLED_BY_DEFAULT` in `wallpaper/WallpaperSettings.kt` |
 | Which file types can be attached | `pickFile.launch(...)` in `GeofenceDetailActivity` |
 | What data is stored | `data/GeofenceRepository.kt` (and update `firestore.rules`) |
 | Battery vs. responsiveness | the location request in `geofence/LocationService.kt` |

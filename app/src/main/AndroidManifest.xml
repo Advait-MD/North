@@ -56,9 +56,17 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
-        <activity android:name=".ui.GeofenceDetailActivity" />
+        <activity
+            android:name=".ui.GeofenceDetailActivity"
+            android:parentActivityName=".ui.MainActivity" />
 
-        <activity android:name=".ui.LoginActivity" />
+        <activity
+            android:name=".ui.LoginActivity"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity
+            android:name=".ui.SettingsActivity"
+            android:parentActivityName=".ui.MainActivity" />
 
         <activity
             android:name=".ui.MainActivity"

@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="north_primary">#BAC3FF</color>
+    <color name="north_on_primary">#0E2482</color>
+    <color name="north_primary_container">#283A99</color>
+    <color name="north_on_primary_container">#DDE1FF</color>
+    <color name="north_secondary">#C4C5DD</color>
+    <color name="north_on_secondary">#2D2F42</color>
+    <color name="north_secondary_container">#434659</color>
+    <color name="north_on_secondary_container">#E0E1F9</color>
+    <color name="north_tertiary">#82D5C8</color>
+    <color name="north_on_tertiary">#003731</color>
+    <color name="north_tertiary_container">#005048</color>
+    <color name="north_on_tertiary_container">#9EF2E4</color>
+    <color name="north_error">#FFB4AB</color>
+    <color name="north_on_error">#690005</color>
+    <color name="north_error_container">#93000A</color>
+    <color name="north_on_error_container">#FFDAD6</color>
+    <color name="north_background">#121318</color>
+    <color name="north_on_background">#E4E1E9</color>
+    <color name="north_surface">#121318</color>
+    <color name="north_on_surface">#E4E1E9</color>
+    <color name="north_surface_variant">#46464F</color>
+    <color name="north_on_surface_variant">#C7C5D0</color>
+    <color name="north_outline">#90909A</color>
+</resources>

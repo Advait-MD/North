@@ -8,14 +8,20 @@ import android.os.Bundle
 import android.provider.OpenableColumns
 import android.view.View
 import android.view.WindowManager
+import android.widget.ImageView
 import android.widget.TextView
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
+import androidx.core.view.isVisible
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import com.google.android.material.floatingactionbutton.FloatingActionButton
+import com.google.android.material.appbar.MaterialToolbar
+import com.google.android.material.card.MaterialCardView
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
 import com.google.firebase.auth.FirebaseAuth
 import com.nimbus.spatial.R
 import com.nimbus.spatial.data.AttachedFile
@@ -29,18 +35,18 @@ import kotlinx.coroutines.withContext
 import java.util.UUID
 
 /**
- * The files attached to one geofence. Tap + to attach (the file is encrypted into FileVault),
- * tap a file to open it (GatedFileOpener checks the security gates), long-press to remove it.
+ * One place and its files. "Attach file" encrypts a copy into FileVault, tapping a file opens it
+ * (GatedFileOpener checks the security gates), long-pressing removes it.
  */
 class GeofenceDetailActivity : AppCompatActivity() {
 
     private lateinit var fence: GeofenceArea
     private lateinit var vault: FileVault
-    private lateinit var lockStatus: TextView
-    private lateinit var emptyMessage: TextView
-    private lateinit var attachButton: FloatingActionButton
-    private lateinit var adapter: AttachedFileAdapter
     private lateinit var opener: GatedFileOpener
+    private lateinit var adapter: AttachedFileAdapter
+    private lateinit var progress: View
+    private lateinit var emptyState: View
+    private lateinit var attachButton: ExtendedFloatingActionButton
     private val files = mutableListOf<AttachedFile>()
     private var stateListener: SharedPreferences.OnSharedPreferenceChangeListener? = null
 
@@ -59,8 +65,9 @@ class GeofenceDetailActivity : AppCompatActivity() {
         }
         fence = area.copy(ownerId = user.uid)
         vault = FileVault(this, user.uid)
-        opener = GatedFileOpener(this, vault, fence)
+        opener = GatedFileOpener(this, vault, fence, onBusy = ::setBusy)
 
+        enableEdgeToEdge()
         // Keep file names out of screenshots, screen recordings and the recent-apps preview.
         window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
         setContentView(R.layout.activity_geofence_detail)
@@ -69,9 +76,12 @@ class GeofenceDetailActivity : AppCompatActivity() {
     }
 
     private fun setUpViews() {
-        findViewById<TextView>(R.id.tv_geofence_name).text = fence.name.ifEmpty { "Geofence" }
-        lockStatus = findViewById(R.id.tv_lock_status)
-        emptyMessage = findViewById(R.id.tv_empty)
+        findViewById<MaterialToolbar>(R.id.toolbar).apply {
+            title = fence.name.ifEmpty { getString(R.string.app_name) }
+            setNavigationOnClickListener { finish() }
+        }
+        progress = findViewById(R.id.progress)
+        emptyState = findViewById(R.id.empty_state)
 
         adapter = AttachedFileAdapter(files, onOpen = opener::open, onRemove = ::confirmRemove)
         findViewById<RecyclerView>(R.id.rv_files).apply {
@@ -86,7 +96,7 @@ class GeofenceDetailActivity : AppCompatActivity() {
         super.onStart()
         // Back from a viewer app: wipe the decrypted copy it was showing.
         FileVault.clearDecrypted(this, fence.id)
-        // Lock or unlock live if the user crosses the fence while this screen is open.
+        // Lock or unlock live if the user crosses the place's edge while this screen is open.
         refreshLockState()
         stateListener = GeofenceStateStore.addListener(this, ::refreshLockState)
     }
@@ -102,24 +112,45 @@ class GeofenceDetailActivity : AppCompatActivity() {
         super.onDestroy()
     }
 
-    private fun isInside() = GeofenceStateStore.isInside(this, fence.id)
-
+    /** Teal "Unlocked" card when inside, grey "Locked" card when outside. */
     private fun refreshLockState() {
-        val unlocked = isInside()
+        val unlocked = GeofenceStateStore.isInside(this, fence.id)
         adapter.unlocked = unlocked
-        lockStatus.text =
-            if (unlocked) "Unlocked: you're inside this geofence" else "Locked: you're outside this geofence"
+
+        val background = if (unlocked) R.color.north_tertiary_container else R.color.north_surface_variant
+        val foreground = if (unlocked) R.color.north_on_tertiary_container else R.color.north_on_surface_variant
+        val foregroundColor = ContextCompat.getColor(this, foreground)
+
+        findViewById<MaterialCardView>(R.id.card_lock_status)
+            .setCardBackgroundColor(ContextCompat.getColor(this, background))
+        findViewById<ImageView>(R.id.iv_lock_status).apply {
+            setImageResource(if (unlocked) R.drawable.ic_lock_open else R.drawable.ic_lock)
+            setColorFilter(foregroundColor)
+        }
+        findViewById<TextView>(R.id.tv_lock_title).apply {
+            setText(if (unlocked) R.string.detail_unlocked_title else R.string.detail_locked_title)
+            setTextColor(foregroundColor)
+        }
+        findViewById<TextView>(R.id.tv_lock_body).apply {
+            setText(if (unlocked) R.string.detail_unlocked_body else R.string.detail_locked_body)
+            setTextColor(foregroundColor)
+        }
+    }
+
+    private fun setBusy(busy: Boolean) {
+        progress.visibility = if (busy) View.VISIBLE else View.INVISIBLE
+        attachButton.isEnabled = !busy
     }
 
     private fun loadFiles() {
         GeofenceRepository.loadFiles(fence.id, fence.ownerId)
             .addOnSuccessListener { loaded ->
                 files.clear()
-                files.addAll(loaded)
+                files.addAll(loaded.sortedBy { it.name.lowercase() })
                 adapter.notifyDataSetChanged()
-                emptyMessage.visibility = if (files.isEmpty()) View.VISIBLE else View.GONE
+                emptyState.isVisible = files.isEmpty()
             }
-            .addOnFailureListener { toast("Failed to load files: ${it.message}") }
+            .addOnFailureListener { showMessage("Couldn't load files: ${it.message}", long = true) }
     }
 
     // ---- Attaching: encrypt, save metadata, then offer to delete the original ----
@@ -130,9 +161,7 @@ class GeofenceDetailActivity : AppCompatActivity() {
             name = displayName(original),
             mimeType = contentResolver.getType(original) ?: "application/octet-stream"
         )
-        attachButton.isEnabled = false
-        toast("Encrypting ${file.name}...")
-
+        setBusy(true)
         lifecycleScope.launch {
             try {
                 withContext(Dispatchers.IO) {
@@ -140,8 +169,8 @@ class GeofenceDetailActivity : AppCompatActivity() {
                     vault.pinFence(fence)
                 }
             } catch (e: Exception) {
-                toast("Couldn't encrypt ${file.name}: ${e.message}", long = true)
-                attachButton.isEnabled = true
+                setBusy(false)
+                showMessage("Couldn't encrypt ${file.name}: ${e.message}", long = true)
                 return@launch
             }
             GeofenceRepository.addEncryptedFile(fence.id, fence.ownerId, file)
@@ -151,9 +180,9 @@ class GeofenceDetailActivity : AppCompatActivity() {
                 }
                 .addOnFailureListener {
                     lifecycleScope.launch(Dispatchers.IO) { vault.delete(fence.id, file.id) }
-                    toast("Couldn't attach file: ${it.message}")
+                    showMessage("Couldn't attach ${file.name}: ${it.message}", long = true)
                 }
-                .addOnCompleteListener { attachButton.isEnabled = true }
+                .addOnCompleteListener { setBusy(false) }
         }
     }
 
@@ -171,11 +200,11 @@ class GeofenceDetailActivity : AppCompatActivity() {
         val message =
             if (file.isEncrypted) "This deletes North's encrypted copy. If you deleted the original, the file is gone for good."
             else "It's only detached from this place. The file stays on your phone."
-        AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle("Remove ${file.name}?")
             .setMessage(message)
             .setPositiveButton("Remove") { _, _ -> removeFile(file) }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.dialog_cancel, null)
             .show()
     }
 
@@ -184,8 +213,9 @@ class GeofenceDetailActivity : AppCompatActivity() {
             .addOnSuccessListener {
                 lifecycleScope.launch(Dispatchers.IO) { vault.delete(fence.id, file.id) }
                 loadFiles()
+                showMessage("${file.name} removed")
             }
-            .addOnFailureListener { toast("Couldn't remove file: ${it.message}") }
+            .addOnFailureListener { showMessage("Couldn't remove ${file.name}: ${it.message}", long = true) }
     }
 
     companion object {

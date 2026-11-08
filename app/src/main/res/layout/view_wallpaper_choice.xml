@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One wallpaper slot on the settings screen ("At a place" or "Elsewhere"): label, preview,
+     Choose and Reset. Included twice in activity_settings.xml. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="0dp"
+    android:layout_height="wrap_content"
+    android:layout_weight="1"
+    android:gravity="center_horizontal"
+    android:orientation="vertical">
+
+    <TextView
+        android:id="@+id/tv_label"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textAppearance="?attr/textAppearanceLabelLarge"
+        tools:text="@string/settings_wallpaper_inside" />
+
+    <!-- Phone-shaped (9:16) preview. -->
+    <com.google.android.material.imageview.ShapeableImageView
+        android:id="@+id/iv_preview"
+        android:layout_width="108dp"
+        android:layout_height="192dp"
+        android:layout_marginTop="8dp"
+        android:padding="1dp"
+        android:scaleType="centerCrop"
+        app:shapeAppearanceOverlay="@style/ShapeAppearance.North.Preview"
+        app:strokeColor="?attr/colorOutline"
+        app:strokeWidth="1dp"
+        tools:src="@drawable/in_fence" />
+
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:orientation="horizontal">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_choose"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/settings_wallpaper_choose" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_reset"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/settings_wallpaper_reset" />
+    </LinearLayout>
+</LinearLayout>

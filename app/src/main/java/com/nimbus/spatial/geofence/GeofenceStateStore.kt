@@ -15,6 +15,12 @@ object GeofenceStateStore {
     fun isInside(context: Context, geofenceId: String): Boolean =
         synchronized(lock) { read(prefs(context)) }.contains(geofenceId)
 
+    /** IDs of every place the user is inside right now. */
+    fun insideIds(context: Context): Set<String> = synchronized(lock) { read(prefs(context)) }
+
+    /** True if the user is inside at least one place right now. */
+    fun isInsideAny(context: Context): Boolean = insideIds(context).isNotEmpty()
+
     fun enter(context: Context, ids: Collection<String>): InsideStateChange =
         update(context) { GeofenceState.enter(it, ids) }
 
