@@ -1,3 +1,66 @@
 <resources>
     <string name="app_name">North</string>
+
+    <!-- Login -->
+    <string name="login_tagline">Files that only open where they belong.</string>
+    <string name="login_email">Email</string>
+    <string name="login_password">Password</string>
+    <string name="login_sign_in">Sign in</string>
+    <string name="login_create_account">Create account</string>
+    <string name="cd_logo">North logo</string>
+
+    <!-- Home -->
+    <string name="main_new_place_title">New place</string>
+    <string name="main_new_place_body">Stand where you want it, pick a size, and save. Files you attach to a place only open there.</string>
+    <string name="main_radius">Radius</string>
+    <string name="main_radius_value">%1$d m</string>
+    <string name="main_create_place">Create place here</string>
+    <string name="main_locating">Finding your location…</string>
+    <string name="main_places_header">Your places</string>
+    <string name="main_empty_title">No places yet</string>
+    <string name="main_empty_body">Create your first place above.</string>
+    <string name="main_banner_background">North can\'t tell when you arrive somewhere. Allow location access \"All the time\".</string>
+    <string name="main_banner_location">North needs your location to create places and unlock files.</string>
+    <string name="main_banner_action">Allow</string>
+    <string name="dialog_place_name_title">Name this place</string>
+    <string name="dialog_place_name_hint">For example, Home</string>
+    <string name="dialog_save">Save</string>
+    <string name="dialog_cancel">Cancel</string>
+
+    <!-- Place list item -->
+    <string name="place_radius">%1$d m radius</string>
+    <string name="place_here">You\'re here</string>
+    <string name="place_delete">Delete place</string>
+
+    <!-- Place screen -->
+    <string name="detail_attach">Attach file</string>
+    <string name="detail_empty_title">No files here yet</string>
+    <string name="detail_empty_body">Tap Attach file. North keeps an encrypted copy that only opens inside this place.</string>
+    <string name="detail_unlocked_title">Unlocked</string>
+    <string name="detail_unlocked_body">You\'re inside this place. Tap a file to open it.</string>
+    <string name="detail_locked_title">Locked</string>
+    <string name="detail_locked_body">These files open only when you\'re inside this place.</string>
+    <string name="file_encrypted">Encrypted</string>
+    <string name="file_not_encrypted">Not encrypted · remove and attach again to protect it</string>
+    <string name="file_locked">Locked</string>
+    <string name="cd_back">Back</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_section_wallpaper">Wallpaper</string>
+    <string name="settings_wallpaper_switch">Change wallpaper</string>
+    <string name="settings_wallpaper_switch_body">Switch your wallpaper when you arrive at or leave a place.</string>
+    <string name="settings_wallpaper_unsupported">This phone doesn\'t let apps change the wallpaper.</string>
+    <string name="settings_wallpaper_target">Apply to</string>
+    <string name="settings_target_home">Home</string>
+    <string name="settings_target_lock">Lock</string>
+    <string name="settings_target_both">Both</string>
+    <string name="settings_wallpaper_inside">At a place</string>
+    <string name="settings_wallpaper_outside">Elsewhere</string>
+    <string name="settings_wallpaper_choose">Choose</string>
+    <string name="settings_wallpaper_reset">Reset</string>
+    <string name="settings_wallpaper_note">North replaces your current wallpaper and can\'t restore it later.</string>
+    <string name="settings_section_account">Account</string>
+    <string name="settings_signed_in_as">Signed in as</string>
+    <string name="settings_log_out">Log out</string>
 </resources>

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- FileProvider may only share temporary decrypted copies, never the encrypted vault. -->
+<paths>
+    <cache-path name="decrypted" path="decrypted/" />
+</paths>

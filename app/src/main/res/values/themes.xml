@@ -1,23 +1,42 @@
-<resources xmlns:tools="http://schemas.android.com/tools">
+<!-- Every activity calls enableEdgeToEdge(); layouts use fitsSystemWindows to stay clear of the bars. -->
+<resources>
 
-    <!-- Main App Theme -->
-    <style name="Theme.Nimbus" parent="Theme.MaterialComponents.DayNight.NoActionBar">
-        <!-- Customize your theme here -->
-        <item name="colorPrimary">#020202</item>
-        <item name="colorPrimaryVariant">#090909</item>
-        <item name="colorOnPrimary">#FFFFFF</item>
-        <item name="colorSecondary">#021890</item>
-        <item name="colorOnSecondary">#F6F5F5</item>
-        <item name="android:statusBarColor" tools:targetApi="l">#090909</item>
+    <!-- Material 3, light and dark. Colors are in values/colors.xml and values-night/colors.xml. -->
+    <style name="Theme.Nimbus" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/north_primary</item>
+        <item name="colorOnPrimary">@color/north_on_primary</item>
+        <item name="colorPrimaryContainer">@color/north_primary_container</item>
+        <item name="colorOnPrimaryContainer">@color/north_on_primary_container</item>
+        <item name="colorSecondary">@color/north_secondary</item>
+        <item name="colorOnSecondary">@color/north_on_secondary</item>
+        <item name="colorSecondaryContainer">@color/north_secondary_container</item>
+        <item name="colorOnSecondaryContainer">@color/north_on_secondary_container</item>
+        <item name="colorTertiary">@color/north_tertiary</item>
+        <item name="colorOnTertiary">@color/north_on_tertiary</item>
+        <item name="colorTertiaryContainer">@color/north_tertiary_container</item>
+        <item name="colorOnTertiaryContainer">@color/north_on_tertiary_container</item>
+        <item name="colorError">@color/north_error</item>
+        <item name="colorOnError">@color/north_on_error</item>
+        <item name="colorErrorContainer">@color/north_error_container</item>
+        <item name="colorOnErrorContainer">@color/north_on_error_container</item>
+        <item name="android:colorBackground">@color/north_background</item>
+        <item name="colorOnBackground">@color/north_on_background</item>
+        <item name="colorSurface">@color/north_surface</item>
+        <item name="colorOnSurface">@color/north_on_surface</item>
+        <item name="colorSurfaceVariant">@color/north_surface_variant</item>
+        <item name="colorOnSurfaceVariant">@color/north_on_surface_variant</item>
+        <item name="colorOutline">@color/north_outline</item>
     </style>
 
-    <!-- Translucent Theme for LoginActivity (frosted glass effect) -->
-    <style name="Theme.Nimbus.LoginTransparent" parent="Theme.MaterialComponents.DayNight.NoActionBar">
-        <item name="android:windowIsTranslucent">true</item>
-        <item name="android:windowBackground">@android:color/transparent</item>
-        <item name="android:windowContentOverlay">@null</item>
-        <item name="android:backgroundDimEnabled">false</item>
-        <item name="android:statusBarColor" tools:targetApi="l">#00000000</item>
+    <!-- Rounded corners for wallpaper previews. -->
+    <style name="ShapeAppearance.North.Preview" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">16dp</item>
+    </style>
+
+    <!-- Section headings ("Wallpaper", "Account") on the settings screen. -->
+    <style name="TextAppearance.North.SectionHeader" parent="TextAppearance.Material3.LabelLarge">
+        <item name="android:textColor">?attr/colorPrimary</item>
     </style>
 
 </resources>

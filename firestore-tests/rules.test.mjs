@@ -1,0 +1,45 @@
+import { initializeTestEnvironment, assertSucceeds, assertFails } from '@firebase/rules-unit-testing';
+import { doc, getDoc, setDoc, updateDoc, deleteDoc, collection, query, where, getDocs, addDoc } from 'firebase/firestore';
+import { readFileSync } from 'fs';
+const env = await initializeTestEnvironment({ projectId: 'demo-north',
+  firestore: { rules: readFileSync(new URL('../firestore.rules', import.meta.url), 'utf8'), host: '127.0.0.1', port: 8080 } });
+await env.withSecurityRulesDisabled(async c => {
+  const db = c.firestore();
+  await setDoc(doc(db, 'geofence_areas/aliceHome'), { name: 'Home', ownerId: 'alice', isEnabled: true, latitude: 1, longitude: 2, radius: 50 });
+  await setDoc(doc(db, 'geofence_areas/bobHome'), { name: 'Home', ownerId: 'bob', isEnabled: true });
+  await setDoc(doc(db, 'geofences/aliceHome/entities/e1'), { fileName: 'a.pdf', ownerId: 'alice' });
+});
+const alice = env.authenticatedContext('alice').firestore();
+const bob = env.authenticatedContext('bob').firestore();
+const anon = env.unauthenticatedContext().firestore();
+const results = [];
+async function t(name, p) { try { await p; results.push(['PASS', name]); } catch (e) { results.push(['FAIL', name + ' :: ' + e.message]); } }
+const areas = (db) => collection(db, 'geofence_areas');
+await t('alice reads own area', assertSucceeds(getDoc(doc(alice, 'geofence_areas/aliceHome'))));
+await t('alice owner-scoped query (app query)', assertSucceeds(getDocs(query(areas(alice), where('ownerId', '==', 'alice')))));
+await t('bob cannot read alice area', assertFails(getDoc(doc(bob, 'geofence_areas/aliceHome'))));
+await t('OLD unscoped isEnabled query is rejected', assertFails(getDocs(query(areas(alice), where('isEnabled', '==', true)))));
+await t('unauth cannot read', assertFails(getDoc(doc(anon, 'geofence_areas/aliceHome'))));
+await t('alice creates own area', assertSucceeds(setDoc(doc(alice, 'geofence_areas/aliceWork'), { ownerId: 'alice', name: 'Work', latitude: 3, longitude: 4, radius: 100 })));
+await t('area without coordinates rejected', assertFails(setDoc(doc(alice, 'geofence_areas/noCoords'), { ownerId: 'alice', name: 'X', radius: 50 })));
+await t('area with zero radius rejected', assertFails(setDoc(doc(alice, 'geofence_areas/zero'), { ownerId: 'alice', latitude: 1, longitude: 2, radius: 0 })));
+await t('area with huge radius rejected (would unlock everywhere)', assertFails(setDoc(doc(alice, 'geofence_areas/huge'), { ownerId: 'alice', latitude: 1, longitude: 2, radius: 5000000 })));
+await t('bob cannot create area as alice', assertFails(setDoc(doc(bob, 'geofence_areas/fake'), { ownerId: 'alice', latitude: 1, longitude: 2, radius: 50 })));
+await t('bob cannot delete alice area', assertFails(deleteDoc(doc(bob, 'geofence_areas/aliceHome'))));
+await t('alice cannot give area to bob', assertFails(updateDoc(doc(alice, 'geofence_areas/aliceHome'), { ownerId: 'bob' })));
+await t('alice can rename own area', assertSucceeds(updateDoc(doc(alice, 'geofence_areas/aliceHome'), { name: 'House' })));
+await t('alice cannot move her fence (gate bypass)', assertFails(updateDoc(doc(alice, 'geofence_areas/aliceHome'), { latitude: 40, longitude: -70 })));
+await t('alice cannot enlarge her fence (gate bypass)', assertFails(updateDoc(doc(alice, 'geofence_areas/aliceHome'), { radius: 999 })));
+await t('alice reads own entities (app query)', assertSucceeds(getDocs(query(collection(alice, 'geofences/aliceHome/entities'), where('ownerId', '==', 'alice')))));
+await t('bob cannot list alice entities', assertFails(getDocs(collection(bob, 'geofences/aliceHome/entities'))));
+await t('alice attaches file to own fence', assertSucceeds(addDoc(collection(alice, 'geofences/aliceHome/entities'), { ownerId: 'alice', fileName: 'b.jpg' })));
+await t('alice cannot attach to bob fence', assertFails(addDoc(collection(alice, 'geofences/bobHome/entities'), { ownerId: 'alice' })));
+await t('alice cannot attach to nonexistent fence', assertFails(addDoc(collection(alice, 'geofences/nope/entities'), { ownerId: 'alice' })));
+await t('alice cannot edit a file record', assertFails(updateDoc(doc(alice, 'geofences/aliceHome/entities/e1'), { fileName: 'x' })));
+await t('bob cannot delete alice entity', assertFails(deleteDoc(doc(bob, 'geofences/aliceHome/entities/e1'))));
+await t('alice deletes own entity (area delete cascade)', assertSucceeds(deleteDoc(doc(alice, 'geofences/aliceHome/entities/e1'))));
+await t('alice can delete own area',assertSucceeds(deleteDoc(doc(alice, 'geofence_areas/aliceWork'))));
+await env.cleanup();
+for (const r of results) console.log(r.join('  '));
+console.log(`${results.filter(r=>r[0]==='PASS').length}/${results.length} passed`);
+process.exit(results.every(r=>r[0]==='PASS') ? 0 : 1);
